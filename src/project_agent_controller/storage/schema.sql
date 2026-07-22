@@ -75,3 +75,42 @@ CREATE TABLE IF NOT EXISTS incident_samples (
     PRIMARY KEY(incident_id, slot),
     FOREIGN KEY(incident_id) REFERENCES incidents(incident_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS knowledge_entries (
+    entry_id TEXT PRIMARY KEY,
+    entry_type TEXT NOT NULL,
+    project_id TEXT,
+    status TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    technologies_json TEXT NOT NULL,
+    components_json TEXT NOT NULL,
+    workflows_json TEXT NOT NULL,
+    risk_tags_json TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    source_path TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_fingerprints (
+    entry_id TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    PRIMARY KEY(entry_id, fingerprint),
+    FOREIGN KEY(entry_id) REFERENCES knowledge_entries(entry_id) ON DELETE CASCADE
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_entries_fts USING fts5(
+    entry_id UNINDEXED,
+    title,
+    summary,
+    technologies,
+    components,
+    workflows,
+    risk_tags
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_quarantine (
+    source_path TEXT PRIMARY KEY,
+    reason TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL
+);
