@@ -3,11 +3,14 @@ from project_agent_controller.domain.models import (
     DockerSourceConfig,
     EventRecord,
     FileSourceConfig,
+    GitHubCISourceConfig,
+    GitHubProviderConfig,
+    GitSourceConfig,
     ProcessSourceConfig,
     ProjectConfig,
     ProjectsConfig,
+    SCMProvidersConfig,
     Severity,
-    SourceConfig,
 )
 
 __all__ = [
@@ -15,9 +18,12 @@ __all__ = [
     "DockerSourceConfig",
     "EventRecord",
     "FileSourceConfig",
+    "GitHubCISourceConfig",
+    "GitHubProviderConfig",
+    "GitSourceConfig",
     "ProcessSourceConfig",
     "ProjectConfig",
     "ProjectsConfig",
+    "SCMProvidersConfig",
     "Severity",
-    "SourceConfig",
 ]

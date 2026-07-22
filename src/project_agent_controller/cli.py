@@ -14,6 +14,7 @@ incident_app = typer.Typer(no_args_is_help=True, help="Inspect local incidents")
 controller_app = typer.Typer(no_args_is_help=True, help="Control local observer state")
 app.add_typer(incident_app, name="incident")
 app.add_typer(controller_app, name="controller")
+_SOURCE_KINDS = frozenset({"process", "docker", "git", "github_ci"})
 
 
 @app.command()
@@ -39,8 +40,14 @@ def status() -> None:
 
 
 @app.command("sources")
-def sources(project_id: str) -> None:
-    """Show sanitized current process and Docker source states."""
+def sources(
+    project_id: str,
+    kind: str | None = typer.Option(None, "--kind"),
+) -> None:
+    """Show sanitized current source states, optionally filtered by kind."""
+    if kind is not None and kind not in _SOURCE_KINDS:
+        typer.echo(f"unsupported source kind: {kind}", err=True)
+        raise typer.Exit(code=2)
     runtime = build_runtime(Settings())
     try:
         runtime.registry.get(project_id)
@@ -50,6 +57,7 @@ def sources(project_id: str) -> None:
     payload = [
         state.model_dump(mode="json")
         for state in runtime.source_states.list(project_id)
+        if kind is None or state.source_kind == kind
     ]
     typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 

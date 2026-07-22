@@ -8,6 +8,8 @@ from project_agent_controller.domain.models import (
     DockerSourceConfig,
     EventRecord,
     FileSourceConfig,
+    GitHubCISourceConfig,
+    GitSourceConfig,
     ProcessSourceConfig,
     ProjectConfig,
 )
@@ -37,8 +39,38 @@ class DockerObserver(Protocol):
     ) -> SourceObservation: ...
 
 
+class GitObserver(Protocol):
+    def observe(
+        self,
+        project_id: str,
+        run_id: str,
+        source: GitSourceConfig,
+        previous: SourceState | None,
+    ) -> SourceObservation: ...
+
+
+class CIObserver(Protocol):
+    def observe(
+        self,
+        project_id: str,
+        run_id: str,
+        source: GitHubCISourceConfig,
+        git_state: SourceState | None,
+        previous: SourceState | None,
+    ) -> SourceObservation: ...
+
+
 class ObservationBlocked(RuntimeError):
     pass
+
+
+_SOURCE_ORDER = {
+    "file": 0,
+    "process": 1,
+    "docker": 2,
+    "git": 3,
+    "github_ci": 4,
+}
 
 
 class ObserverRunner:
@@ -52,6 +84,8 @@ class ObserverRunner:
         incident_service: IncidentService | None = None,
         process_observer: ProcessObserver | None = None,
         docker_observer: DockerObserver | None = None,
+        git_observer: GitObserver | None = None,
+        ci_observers: dict[str, CIObserver] | None = None,
         source_states: SourceStateStore | None = None,
     ) -> None:
         self.database = database
@@ -61,6 +95,8 @@ class ObserverRunner:
         self.incident_service = incident_service
         self.process_observer = process_observer
         self.docker_observer = docker_observer
+        self.git_observer = git_observer
+        self.ci_observers = ci_observers or {}
         self.source_states = source_states or SourceStateStore(database)
         self._lock = Lock()
 
@@ -71,26 +107,27 @@ class ObserverRunner:
                 raise ObservationBlocked(
                     f"observation blocked by controller state {state.value}"
                 )
-
             emitted = 0
-            for source in project.sources:
+            sources = sorted(project.sources, key=lambda item: _SOURCE_ORDER[item.kind])
+            for source in sources:
                 if isinstance(source, FileSourceConfig):
                     emitted += self._observe_file(project, source)
                 elif isinstance(source, ProcessSourceConfig):
                     emitted += self._observe_process(project, source)
                 elif isinstance(source, DockerSourceConfig):
                     emitted += self._observe_docker(project, source)
-                else:  # pragma: no cover - Pydantic discriminator prevents this
+                elif isinstance(source, GitSourceConfig):
+                    emitted += self._observe_git(project, source)
+                elif isinstance(source, GitHubCISourceConfig):
+                    emitted += self._observe_ci(project, source)
+                else:  # pragma: no cover
                     raise TypeError(f"unsupported source type: {type(source).__name__}")
             return emitted
 
     def _observe_file(self, project: ProjectConfig, source: FileSourceConfig) -> int:
         cursor = self.database.get_cursor(project.project_id, source.source_id)
         batch = self.reader.read_available(
-            project.project_id,
-            self.run_id,
-            source,
-            cursor,
+            project.project_id, self.run_id, source, cursor
         )
         incident_candidates: list[tuple[str, EventRecord]] = []
         if self.incident_service is not None:
@@ -105,36 +142,58 @@ class ObserverRunner:
         )
         return len(batch.events)
 
-    def _observe_process(
-        self,
-        project: ProjectConfig,
-        source: ProcessSourceConfig,
-    ) -> int:
+    def _observe_process(self, project: ProjectConfig, source: ProcessSourceConfig) -> int:
         if self.process_observer is None:
             raise RuntimeError("process observer is not configured")
-        previous = self.source_states.get(project.project_id, source.source_id)
-        observation = self.process_observer.observe(
-            project.project_id,
-            self.run_id,
-            source,
-            previous,
+        return self._append_system(
+            self.process_observer.observe(
+                project.project_id,
+                self.run_id,
+                source,
+                self.source_states.get(project.project_id, source.source_id),
+            )
         )
-        self.source_states.append(observation)
-        return len(observation.events)
 
-    def _observe_docker(
-        self,
-        project: ProjectConfig,
-        source: DockerSourceConfig,
-    ) -> int:
+    def _observe_docker(self, project: ProjectConfig, source: DockerSourceConfig) -> int:
         if self.docker_observer is None:
             raise RuntimeError("docker observer is not configured")
-        previous = self.source_states.get(project.project_id, source.source_id)
-        observation = self.docker_observer.observe(
-            project.project_id,
-            self.run_id,
-            source,
-            previous,
+        return self._append_system(
+            self.docker_observer.observe(
+                project.project_id,
+                self.run_id,
+                source,
+                self.source_states.get(project.project_id, source.source_id),
+            )
         )
+
+    def _observe_git(self, project: ProjectConfig, source: GitSourceConfig) -> int:
+        if self.git_observer is None:
+            raise RuntimeError("git observer is not configured")
+        return self._append_system(
+            self.git_observer.observe(
+                project.project_id,
+                self.run_id,
+                source,
+                self.source_states.get(project.project_id, source.source_id),
+            )
+        )
+
+    def _observe_ci(self, project: ProjectConfig, source: GitHubCISourceConfig) -> int:
+        observer = self.ci_observers.get(source.provider_id)
+        if observer is None:
+            raise RuntimeError(f"CI observer is not configured: {source.provider_id}")
+        git_state = self.source_states.get(project.project_id, source.git_source_id)
+        previous = self.source_states.get(project.project_id, source.source_id)
+        return self._append_system(
+            observer.observe(
+                project.project_id,
+                self.run_id,
+                source,
+                git_state,
+                previous,
+            )
+        )
+
+    def _append_system(self, observation: SourceObservation) -> int:
         self.source_states.append(observation)
         return len(observation.events)

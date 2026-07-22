@@ -1,0 +1,62 @@
+config_version: 1
+projects:
+  - project_id: chan-shuo
+    display_name: Chan Shuo
+    technologies: [typescript, nodejs, sqlite]
+    sources:
+      - source_id: repository
+        kind: git
+        path_ref: local://chan-shuo
+        remote: origin
+        include_untracked: true
+        heartbeat_seconds: 900
+      - source_id: github-ci
+        kind: github_ci
+        provider_id: github-cloud
+        repository: lpearf-pixel/chan-shuo
+        git_source_id: repository
+        heartbeat_seconds: 900
+        max_check_runs: 100
+        max_failed_checks: 20
+
+  - project_id: community-selection-miniapp
+    display_name: Community Selection Miniapp
+    technologies: [typescript, nodejs, prisma, postgresql]
+    sources:
+      - source_id: repository
+        kind: git
+        path_ref: local://community-selection-miniapp
+        remote: origin
+      - source_id: github-ci
+        kind: github_ci
+        provider_id: github-cloud
+        repository: lpearf-pixel/community-selection-miniapp
+        git_source_id: repository
+
+  - project_id: kanyu-spatial-engine
+    display_name: Kanyu Spatial Engine
+    technologies: [python]
+    sources:
+      - source_id: repository
+        kind: git
+        path_ref: local://kanyu-spatial-engine
+        remote: origin
+      - source_id: github-ci
+        kind: github_ci
+        provider_id: github-cloud
+        repository: lpearf-pixel/kanyu-spatial-engine
+        git_source_id: repository
+
+  - project_id: project-agent-controller
+    display_name: Project Agent Controller
+    technologies: [python, sqlite]
+    sources:
+      - source_id: repository
+        kind: git
+        path_ref: local://project-agent-controller
+        remote: origin
+      - source_id: github-ci
+        kind: github_ci
+        provider_id: github-cloud
+        repository: lpearf-pixel/project-agent-controller
+        git_source_id: repository
