@@ -29,11 +29,25 @@ class IncidentService:
     def __init__(self, database: Database) -> None:
         self.database = database
 
-    def ingest(self, event: EventRecord) -> Incident | None:
+    @staticmethod
+    def candidate_fingerprint(event: EventRecord) -> str | None:
         is_failure_type = event.event_type.endswith((".failed", ".crashed"))
-        if event.severity not in {Severity.ERROR, Severity.CRITICAL} and not is_failure_type:
+        is_error = event.severity in {Severity.ERROR, Severity.CRITICAL}
+        if not is_error and not is_failure_type:
             return None
-        incident_id = self.database.record_incident(fingerprint_event(event), event)
+        return fingerprint_event(event)
+
+    def ingest(self, event: EventRecord) -> Incident | None:
+        fingerprint = self.candidate_fingerprint(event)
+        if fingerprint is None:
+            return None
+        incident_id = self.database.record_incident(fingerprint, event)
+        return self.get(incident_id)
+
+    def find(self, project_id: str, fingerprint: str) -> Incident | None:
+        incident_id = self.database.find_incident_id(project_id, fingerprint)
+        if incident_id is None:
+            return None
         return self.get(incident_id)
 
     def get(self, incident_id: str) -> Incident:

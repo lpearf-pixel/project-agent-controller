@@ -12,6 +12,9 @@ class Settings(BaseSettings):
         default=Path.home() / ".config/project-agent-controller/projects.yaml"
     )
     knowledge_dir: Path | None = None
+    local_sources_root: Path = Field(
+        default=Path.home() / ".local/share/project-agent-controller/sources"
+    )
     host: str = "127.0.0.1"
     port: int = 9090
     poll_interval_seconds: float = 1.0

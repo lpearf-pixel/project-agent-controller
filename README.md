@@ -1,76 +1,160 @@
 # Project Agent Controller
 
-面向个人多项目研发环境的常驻控制平面，用于统一观察项目运行、采集日志、记录执行结果、生成可审计报告，并在受控条件下同步到代码托管平台。
+面向个人多项目研发环境的本地优先常驻控制平面，用于增量观察项目日志、保存可审计事件、聚合重复问题、生成受限 AI Brief，并读取私有 Prompt / Known Problem / Lesson 仓库。
 
-> 当前阶段：**设计评审**。仓库暂不包含项目命令执行、自动修改代码、自动合并或生产部署能力。
+> 当前实现阶段：**v0.1A File Observer（Draft）**。
 >
-> 当前仓库为公开设计仓库，只保存无敏感信息的架构文档；未来运行时状态、真实问题库和项目提示词必须同步到专用私有仓库或保存在本地。
+> v0.1A 不执行项目命令、不调用 AI、不写入业务仓库，也不上传原始日志。
 
-## 核心目标
+## v0.1A 已实现
 
-- 减少人工复制终端日志、测试结果和 Git 状态的成本。
-- 为每个项目建立统一、可查询、可恢复的执行状态。
-- 对大日志进行分层保存、结构化精简和可追溯裁剪，而不是全部上传或只截取日志尾部。
-- 让 AI 同时看到本次运行、最近成功基线、历史同类问题和适用经验。
-- 建立本地版本化提示词库、Known Problem Registry 和跨项目 Lesson Library。
-- 采用本地优先、混合部署方式，离线时仍可观察和记录。
-- 将 GitHub、私有 GitHub、GitLab、Gitea/Forgejo 等托管平台置于可替换适配层之后。
-- 任何常驻任务都具备明确的暂停、停止、超时、熔断与恢复机制。
-- 所有结论必须关联原始日志、退出码、提交和时间戳，避免“只看摘要、无法复核”。
+- 声明式项目和文件日志源注册；
+- `local://` 路径引用与根目录越界防护；
+- SQLite WAL 追加事件、日志游标和控制状态；
+- 完整行增量读取、半行等待、日志截断和轮转识别；
+- 缺失日志首次告警、持续缺失合并、恢复事件；
+- FastAPI 生命周期驱动的常驻轮询；
+- 后台轮询与手动观察的进程内互斥；
+- `ACTIVE / DRAINING / DRAINED / EMERGENCY_STOP / RECOVERING / DEGRADED`；
+- 重复错误指纹、Incident 聚合和最多三个代表样本；
+- Authorization、Token、邮箱、手机号和用户目录脱敏；
+- NUL、替换字符和异常控制字符触发 fail-closed；
+- 最大字节数受限、可复现 JSON 的 AI Brief；
+- 私有知识仓库 YAML / Markdown Prompt 索引；
+- 项目 Lesson 隔离、共享 Lesson 审批条件和技术栈过滤；
+- 精确错误指纹优先于 FTS5 全文匹配；
+- 事件、游标和 Incident 在同一事务提交或回滚；
+- 本地 FastAPI 查询接口和 Typer CLI。
 
-## 设计原则
+## 明确未实现
 
-1. **观察与执行分离**：v0.1 只观察既有任务，不主动运行项目命令。
-2. **原始证据与 AI 上下文分离**：大日志只留本地，AI 接收有限大小且可回溯的证据包。
-3. **项目与运行严格隔离**：所有数据携带 project、run、task、attempt、source 和 incident 标识。
-4. **经验先局部、后推广**：项目经验默认只在原项目生效，经验证和批准后才成为共享 Lesson。
-5. **提示词可版本化**：Prompt 具有稳定 ID、版本、输出契约、测试和回滚记录。
-6. **控制面与项目解耦**：项目只需提供声明式配置和标准化状态目录。
-7. **托管平台可替换**：核心逻辑依赖统一 SCM 接口，不直接依赖 GitHub 专有对象。
-8. **默认拒绝高风险动作**：删除、强推、迁移、合并、生产部署默认禁止。
-9. **停止优先于继续**：任何受管任务都必须能够被安全终止，并留下可恢复状态。
-10. **事件不可抵赖**：运行历史采用追加式事件记录，报告由事件和证据生成。
-11. **秘密不入库**：令牌、私钥、账号和本机敏感路径不得写入仓库。
+- Docker、进程、Git 和 CI watcher；
+- 自动运行 test、lint、build 或任意 shell；
+- 模型调用和 AI 自动诊断；
+- 原始日志上传；
+- Git commit、push、PR、Issue 或评论写入；
+- 自动修改代码、合并、部署或数据库破坏性操作。
 
-## 文档导航
+这些能力分别属于后续 v0.1B、v0.1C、v0.2、v0.3 和 v0.4，不得提前穿透权限边界。
+
+## 环境
+
+- Python 3.12 或 3.13；
+- 推荐使用 `uv`；
+- HTTP 服务默认且仅允许绑定 `127.0.0.1`、`::1` 或 `localhost`。
+
+## 配置
+
+复制示例：
+
+```bash
+cp config/projects.example.yaml ~/.config/project-agent-controller/projects.yaml
+```
+
+项目文件使用稳定 ID 和 `local://` 引用：
+
+```yaml
+config_version: 1
+projects:
+  - project_id: example-project
+    display_name: Example Project
+    technologies: [python]
+    sources:
+      - source_id: application-log
+        kind: file
+        path_ref: local://example/application.log
+        parser: text-v1
+```
+
+本机真实目录通过环境变量提供，不进入项目配置或 Git：
+
+```bash
+export PAC_PROJECTS_FILE="$HOME/.config/project-agent-controller/projects.yaml"
+export PAC_LOCAL_SOURCES_ROOT="$HOME/project-agent-sources"
+export PAC_DATA_DIR="$HOME/.local/share/project-agent-controller"
+export PAC_KNOWLEDGE_DIR="$HOME/dev/project-agent-knowledge-private"
+```
+
+上述示例日志对应：
+
+```text
+$PAC_LOCAL_SOURCES_ROOT/example/application.log
+```
+
+## 启动常驻服务
+
+联网环境安装依赖：
+
+```bash
+uv sync
+uv run pac serve
+```
+
+服务启动后，FastAPI lifespan 会自动轮询所有已注册文件源。
+
+查询状态：
+
+```bash
+curl http://127.0.0.1:9090/health
+curl http://127.0.0.1:9090/v1/projects
+```
+
+## CLI
+
+```bash
+uv run pac status
+uv run pac observe-once example-project
+uv run pac incident show <incident-id>
+uv run pac controller drain --actor local-admin --reason maintenance
+uv run pac controller emergency-stop --actor local-admin --reason "unexpected activity"
+uv run pac controller clear-emergency-stop --actor local-admin --reason "risk removed"
+```
+
+解除 Emergency Stop 只进入 `RECOVERING`，不会自动重跑停止前任务。
+
+## 验证
+
+当前离线环境可执行：
+
+```bash
+PAC_VERIFY_MODE=offline ./scripts/verify-v0.1a.sh
+```
+
+离线模式运行 pytest、Python 编译检查和 CLI help。完整发布门禁：
+
+```bash
+./scripts/verify-v0.1a.sh
+```
+
+完整模式会 fail-closed，并要求：
+
+- 已生成并审核的 `uv.lock`；
+- `uv sync --frozen`；
+- Ruff；
+- mypy strict；
+- pytest；
+- CLI smoke test。
+
+## 私有知识仓库
+
+真实项目 Profile、Prompt、Known Problem 和 Lesson 存放于私有仓库 `project-agent-knowledge-private`。原始大日志仍只保存在本地证据库，不进入控制器仓库或知识仓库。
+
+Controller 只索引：
+
+```text
+prompts/**/*.{yaml,yml,md}
+projects/*/known-problems/**/*.{yaml,yml,md}
+projects/*/lessons/**/*.{yaml,yml,md}
+shared/lessons/**/*.{yaml,yml,md}
+```
+
+## 设计文档
 
 - [总体架构设计](docs/superpowers/specs/2026-07-22-project-agent-controller-design.md)
+- [v0.1A 实施计划](docs/superpowers/plans/2026-07-22-v0.1a-file-observer-foundation.md)
 - [日志精简、问题记忆与 AI 反馈设计](docs/architecture/log-curation-incident-memory-and-ai-feedback.md)
 - [本地提示词库与跨项目经验库设计](docs/architecture/local-prompt-and-lesson-library.md)
 - [SCM 可迁移与私有 Git 设计](docs/architecture/scm-portability-and-private-git.md)
 - [停止、熔断与恢复规范](docs/operations/stop-circuit-breaker-and-recovery.md)
 - [版本演进路线图](docs/roadmap/evolution-roadmap.md)
 - [升级、兼容与回滚策略](docs/roadmap/upgrade-compatibility-and-rollback.md)
-
-## v0.1 边界
-
-v0.1 允许：
-
-- 注册项目与读取观察配置；
-- 监听文件、进程、Docker、Git 和 CI 状态；
-- 采集既有任务输出、退出码和运行时指标；
-- 原始日志增量读取、轮转、压缩、指纹去重和本地保留；
-- 生成 Incident Bundle、最近成功基线比较和固定 schema AI Brief；
-- 使用 SQLite FTS5 检索本地 Known Problem 和已批准 Lesson；
-- 维护带 ID、版本、哈希和输出契约的本地 Prompt Registry；
-- 生成本地状态、时间线和 Markdown/JSON 报告；
-- 停止控制器内部任务，以及明确登记为 `owned` 的外部进程；
-- 在明确授权下，把脱敏 reports-only 检查点同步到专用私有状态目标。
-
-v0.1 不允许：
-
-- 主动运行项目 test/lint/build 等命令；
-- 自动调用 AI 后执行建议；
-- AI 自动认定根因或自动批准跨项目 Lesson；
-- 自动上传完整原始日志；
-- 自动修改业务源代码；
-- 自动提交或推送业务工作区变更；
-- 自动创建 PR/Issue 或发表评论；
-- 自动合并、强推或删除；
-- 自动执行数据库破坏性操作；
-- 自动部署生产环境；
-- 仅凭日志关键词判定业务正确。
-
-## 预期接入场景
-
-首批适配长期测试任务、Docker 服务、批量数据导入、CI 验证和多语言工程。每个项目独立配置、独立限流、独立暂停、独立问题记忆，单项目故障或错误经验不得污染其他项目或拖垮全局控制器。

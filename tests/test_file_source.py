@@ -102,3 +102,34 @@ def test_runner_persists_events_and_stop_blocks_observation(settings, tmp_path: 
     control.emergency_stop(actor="local-admin", reason="test stop")
     with pytest.raises(ObservationBlocked, match="EMERGENCY_STOP"):
         runner.observe_once(project())
+
+
+def test_reader_classifies_error_lines_for_incident_curation(tmp_path: Path) -> None:
+    root = tmp_path / "logs"
+    path = root / "demo/app.log"
+    path.parent.mkdir(parents=True)
+    path.write_text("ERROR E900 database timeout\n", encoding="utf-8")
+    reader = FileSourceReader(root)
+
+    batch = reader.read_available("demo", "run-1", source(), cursor=None)
+
+    assert batch.events[0].severity.value == "error"
+
+
+def test_missing_source_is_coalesced_until_file_becomes_available(tmp_path: Path) -> None:
+    root = tmp_path / "logs"
+    reader = FileSourceReader(root)
+
+    first = reader.read_available("demo", "run-1", source(), cursor=None)
+    second = reader.read_available("demo", "run-1", source(), cursor=first.cursor)
+    path = root / "demo/app.log"
+    path.parent.mkdir(parents=True)
+    path.write_text("recovered\n", encoding="utf-8")
+    recovered = reader.read_available("demo", "run-1", source(), cursor=second.cursor)
+
+    assert [event.event_type for event in first.events] == ["source.missing"]
+    assert second.events == ()
+    assert [event.event_type for event in recovered.events] == [
+        "source.available",
+        "log.line",
+    ]

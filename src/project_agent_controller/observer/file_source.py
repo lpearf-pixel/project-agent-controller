@@ -51,9 +51,12 @@ class FileSourceReader:
             byte_offset=0,
             sequence=0,
         )
+        was_missing = previous.device == -1 and previous.inode == -1
         try:
             stat = path.stat()
         except FileNotFoundError:
+            if was_missing:
+                return ReadBatch(events=(), cursor=previous)
             sequence = previous.sequence + 1
             event = self._notice(
                 project_id,
@@ -66,18 +69,39 @@ class FileSourceReader:
             )
             return ReadBatch(
                 events=(event,),
-                cursor=previous.model_copy(update={"sequence": sequence}),
+                cursor=SourceCursor(
+                    project_id=project_id,
+                    source_id=source.source_id,
+                    device=-1,
+                    inode=-1,
+                    byte_offset=0,
+                    sequence=sequence,
+                ),
             )
 
         events: list[EventRecord] = []
         sequence = previous.sequence
         start_offset = previous.byte_offset
-        known_file = previous.device != 0 or previous.inode != 0
+        known_file = not was_missing and (previous.device != 0 or previous.inode != 0)
         identity_changed = known_file and (
             previous.device != stat.st_dev or previous.inode != stat.st_ino
         )
 
-        if identity_changed:
+        if was_missing:
+            sequence += 1
+            events.append(
+                self._notice(
+                    project_id,
+                    run_id,
+                    source,
+                    sequence,
+                    "source.available",
+                    Severity.INFO,
+                    {"path_ref": source.path_ref},
+                )
+            )
+            start_offset = 0
+        elif identity_changed:
             sequence += 1
             events.append(
                 self._notice(
@@ -137,7 +161,7 @@ class FileSourceReader:
                     source_id=source.source_id,
                     sequence=sequence,
                     event_type="log.line",
-                    severity=Severity.INFO,
+                    severity=self._classify_severity(line),
                     occurred_at=datetime.now(UTC),
                     payload={
                         "line": line,
@@ -160,6 +184,18 @@ class FileSourceReader:
             sequence=sequence,
         )
         return ReadBatch(events=tuple(events), cursor=next_cursor)
+
+    @staticmethod
+    def _classify_severity(line: str) -> Severity:
+        normalized = line.upper()
+        if any(
+            marker in normalized
+            for marker in ("ERROR", "FAILED", "FATAL", "PANIC", "EXCEPTION")
+        ):
+            return Severity.ERROR
+        if "WARN" in normalized:
+            return Severity.WARNING
+        return Severity.INFO
 
     @staticmethod
     def _notice(

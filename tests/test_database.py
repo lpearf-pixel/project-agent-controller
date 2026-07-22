@@ -57,3 +57,28 @@ def test_cursor_round_trip(settings) -> None:
     database.upsert_cursor(cursor)
 
     assert database.get_cursor("demo", "app-log") == cursor
+
+
+def test_observation_transaction_rolls_back_events_cursor_and_incident(settings) -> None:
+    database = Database(settings.database_path)
+    database.initialize()
+    event = make_event()
+    cursor = SourceCursor(
+        project_id="demo",
+        source_id="app-log",
+        device=1,
+        inode=2,
+        byte_offset=10,
+        sequence=1,
+    )
+
+    with pytest.raises(sqlite3.IntegrityError):
+        database.append_observation(
+            (event, event),
+            cursor,
+            incident_candidates=(("fp-atomic", event),),
+        )
+
+    assert database.list_events("demo", limit=10) == []
+    assert database.get_cursor("demo", "app-log") is None
+    assert database.find_incident_id("demo", "fp-atomic") is None
