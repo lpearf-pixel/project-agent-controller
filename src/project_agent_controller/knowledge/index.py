@@ -78,9 +78,7 @@ class KnowledgeIndex:
             connection.execute("DELETE FROM knowledge_entries")
             connection.execute("DELETE FROM knowledge_entries_fts")
             connection.execute("DELETE FROM knowledge_quarantine")
-            paths = sorted(
-                (*root.rglob("*.yaml"), *root.rglob("*.yml"), *root.rglob("*.md"))
-            )
+            paths = self._candidate_paths(root)
             for path in paths:
                 content = path.read_bytes()
                 digest = sha256(content).hexdigest()
@@ -176,6 +174,27 @@ class KnowledgeIndex:
             )
         matches.sort(key=lambda item: (-item.score, item.entry_id))
         return KnowledgeMatches(items=tuple(matches[:limit]))
+
+    @staticmethod
+    def _candidate_paths(root: Path) -> list[Path]:
+        candidates: set[Path] = set()
+        roots = [root / "prompts", root / "shared" / "lessons"]
+        projects_root = root / "projects"
+        if projects_root.exists():
+            for project_root in projects_root.iterdir():
+                if project_root.is_dir():
+                    roots.extend(
+                        [
+                            project_root / "known-problems",
+                            project_root / "lessons",
+                        ]
+                    )
+        for candidate_root in roots:
+            if not candidate_root.exists():
+                continue
+            for suffix in ("*.yaml", "*.yml", "*.md"):
+                candidates.update(candidate_root.rglob(suffix))
+        return sorted(candidates)
 
     @staticmethod
     def _load_document(path: Path, text: str) -> dict[str, Any]:
