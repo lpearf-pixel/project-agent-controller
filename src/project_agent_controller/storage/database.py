@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterator
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -271,3 +272,97 @@ class Database:
             }
             for row in rows
         ]
+
+    def record_incident(self, fingerprint: str, event: EventRecord) -> str:
+        event_json = json.dumps(event.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT incident_id, occurrence_count
+                FROM incidents
+                WHERE project_id = ? AND fingerprint = ?
+                """,
+                (event.project_id, fingerprint),
+            ).fetchone()
+            if row is None:
+                incident_id = f"inc-{uuid4()}"
+                connection.execute(
+                    """
+                    INSERT INTO incidents (
+                        incident_id, project_id, fingerprint, event_type, source_id,
+                        first_seen, last_seen, occurrence_count, first_event_json, last_event_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                    """,
+                    (
+                        incident_id,
+                        event.project_id,
+                        fingerprint,
+                        event.event_type,
+                        event.source_id,
+                        event.occurred_at.isoformat(),
+                        event.occurred_at.isoformat(),
+                        event_json,
+                        event_json,
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO incident_samples (incident_id, slot, event_json) VALUES (?, 0, ?)",
+                    (incident_id, event_json),
+                )
+            else:
+                incident_id = str(row["incident_id"])
+                occurrence_count = int(row["occurrence_count"]) + 1
+                connection.execute(
+                    """
+                    UPDATE incidents
+                    SET last_seen = ?, occurrence_count = ?, last_event_json = ?
+                    WHERE incident_id = ?
+                    """,
+                    (event.occurred_at.isoformat(), occurrence_count, event_json, incident_id),
+                )
+                slot = 1 if occurrence_count == 2 else 2
+                connection.execute(
+                    """
+                    INSERT INTO incident_samples (incident_id, slot, event_json)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(incident_id, slot) DO UPDATE SET event_json = excluded.event_json
+                    """,
+                    (incident_id, slot, event_json),
+                )
+            connection.commit()
+        return incident_id
+
+    def get_incident_record(self, incident_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            incident = connection.execute(
+                """
+                SELECT incident_id, project_id, fingerprint, event_type, source_id,
+                       first_seen, last_seen, occurrence_count
+                FROM incidents
+                WHERE incident_id = ?
+                """,
+                (incident_id,),
+            ).fetchone()
+            if incident is None:
+                return None
+            samples = connection.execute(
+                """
+                SELECT slot, event_json
+                FROM incident_samples
+                WHERE incident_id = ?
+                ORDER BY slot ASC
+                """,
+                (incident_id,),
+            ).fetchall()
+        return {
+            "incident_id": str(incident["incident_id"]),
+            "project_id": str(incident["project_id"]),
+            "fingerprint": str(incident["fingerprint"]),
+            "event_type": str(incident["event_type"]),
+            "source_id": str(incident["source_id"]),
+            "first_seen": str(incident["first_seen"]),
+            "last_seen": str(incident["last_seen"]),
+            "occurrence_count": int(incident["occurrence_count"]),
+            "samples": [json.loads(str(row["event_json"])) for row in samples],
+        }
