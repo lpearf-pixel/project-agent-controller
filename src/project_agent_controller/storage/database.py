@@ -108,6 +108,57 @@ class Database:
             for row in rows
         ]
 
+    def append_events_and_cursor(
+        self, events: tuple[EventRecord, ...], cursor: SourceCursor
+    ) -> None:
+        now = datetime.now(UTC).isoformat()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for event in events:
+                connection.execute(
+                    """
+                    INSERT INTO events (
+                        event_id, project_id, run_id, source_id, sequence,
+                        event_type, severity, occurred_at, payload_json, evidence_ref
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        event.event_id,
+                        event.project_id,
+                        event.run_id,
+                        event.source_id,
+                        event.sequence,
+                        event.event_type,
+                        event.severity.value,
+                        event.occurred_at.isoformat(),
+                        json.dumps(event.payload, ensure_ascii=False, sort_keys=True),
+                        event.evidence_ref,
+                    ),
+                )
+            connection.execute(
+                """
+                INSERT INTO source_cursors (
+                    project_id, source_id, device, inode, byte_offset, sequence, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(project_id, source_id) DO UPDATE SET
+                    device = excluded.device,
+                    inode = excluded.inode,
+                    byte_offset = excluded.byte_offset,
+                    sequence = excluded.sequence,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    cursor.project_id,
+                    cursor.source_id,
+                    cursor.device,
+                    cursor.inode,
+                    cursor.byte_offset,
+                    cursor.sequence,
+                    now,
+                ),
+            )
+            connection.commit()
+
     def upsert_cursor(self, cursor: SourceCursor) -> None:
         now = datetime.now(UTC).isoformat()
         with self._connect() as connection:
