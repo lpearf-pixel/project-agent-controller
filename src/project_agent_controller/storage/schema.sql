@@ -53,3 +53,25 @@ CREATE TABLE IF NOT EXISTS control_events (
     next_state TEXT NOT NULL,
     occurred_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS incidents (
+    incident_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    occurrence_count INTEGER NOT NULL CHECK (occurrence_count > 0),
+    first_event_json TEXT NOT NULL,
+    last_event_json TEXT NOT NULL,
+    UNIQUE(project_id, fingerprint)
+);
+
+CREATE TABLE IF NOT EXISTS incident_samples (
+    incident_id TEXT NOT NULL,
+    slot INTEGER NOT NULL CHECK (slot BETWEEN 0 AND 2),
+    event_json TEXT NOT NULL,
+    PRIMARY KEY(incident_id, slot),
+    FOREIGN KEY(incident_id) REFERENCES incidents(incident_id) ON DELETE CASCADE
+);
