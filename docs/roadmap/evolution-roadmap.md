@@ -4,9 +4,9 @@
 
 演进顺序遵循：
 
-1. 先建立可信观察；
+1. 先建立可信观察和安全状态检查点；
 2. 再允许受控执行；
-3. 再接入外部协作平台；
+3. 再接入完整的外部协作能力；
 4. 再增加 AI 分析；
 5. 最后才允许有边界的自动修复。
 
@@ -29,26 +29,31 @@ flowchart LR
 
 ### 目标
 
-替代人工复制日志，建立多项目统一状态和证据系统。
+替代人工复制日志，建立多项目统一状态和证据系统。控制器只观察已由用户或现有工具启动的任务，不主动运行项目命令。
 
 ### 能力
 
 - 项目注册；
 - 文件、进程、Docker、Git watcher；
+- 外部任务登记与 ownership；
 - SQLite WAL 事件库；
 - 增量日志游标；
 - 项目状态 API 与 CLI；
 - Markdown/JSON 报告；
-- 单任务停止、项目暂停、全局 drain、紧急停止；
+- 控制器内部任务停止、项目暂停、全局 drain、紧急停止；
+- 对 `owned` 外部进程的受控停止；
 - 重启恢复和 orphan 识别；
 - secrets 与本机路径脱敏；
+- 可选 reports-only 状态检查点，同步到专用私有状态仓库或隔离状态分支；
 - 本地运行，不开放公网。
 
 ### 禁止
 
+- 运行项目 test/lint/build 等命令；
 - 自动改代码；
-- 自动 commit/push；
-- 自动创建或合并 PR；
+- 自动提交或推送业务工作区变更；
+- 自动创建 PR/Issue 或评论；
+- 自动合并、强推或删除；
 - 任意 shell；
 - 远程停止命令。
 
@@ -58,6 +63,7 @@ flowchart LR
 - 长任务持续观察超过一小时；
 - 断网、重启、日志轮转测试通过；
 - stop/recovery 故障注入通过；
+- reports-only 同步幂等且不触碰业务分支；
 - 无敏感信息进入报告。
 
 ## 4. v0.2 Controlled Runner：受控执行
@@ -81,7 +87,7 @@ flowchart LR
 ### 仍然禁止
 
 - 修改业务文件；
-- 自动提交和推送；
+- 自动提交和推送业务变更；
 - 数据库破坏性操作；
 - 生产部署。
 
@@ -96,34 +102,38 @@ flowchart LR
 
 ### 目标
 
-把稳定报告和验证结论同步到 GitHub 或私有 Git，而不是同步实时原始日志。
+在 v0.1 的最小 reports-only 检查点之上，加入可迁移的完整 SCM 协作层。
 
 ### 新增能力
 
 - GitHub Cloud adapter；
 - 私有 GitHub adapter；
 - Gitea/Forgejo adapter；
+- GitLab adapter；
 - provider capability probe；
-- 幂等 PR/Issue 评论；
-- 报告文件检查点；
+- 幂等 PR/Issue/MR 评论；
 - commit/check/branch 读取；
+- 验证状态发布；
 - 离线同步队列；
 - reports-only mirror；
-- provider 切换验收工具。
+- provider 切换验收工具；
+- 协作对象 source/target ID 映射。
 
 ### 安全边界
 
 - 默认只读 SCM；
 - 写入必须按项目授权；
 - 不允许自动 merge、force push 或删除；
-- 工作区存在未知变化时禁止提交报告到业务分支。
+- 工作区存在未知变化时禁止提交报告到业务分支；
+- 公共仓库不允许接收私有日志、绝对路径和个人数据。
 
 ### 退出门槛
 
 - GitHub 与 Gitea mock provider 契约测试通过；
 - provider 不可用不影响本地观察；
 - 重试不会重复评论；
-- 配置切换 provider 不修改核心任务代码。
+- 配置切换 provider 不修改核心任务代码；
+- GitHub.com 到私有 Git provider 的演练迁移通过。
 
 ## 6. v0.4 Diagnostic Assistant：AI 诊断助手
 
@@ -286,6 +296,6 @@ AI 不得仅凭摘要宣布任务成功。
 
 ## 12. 推荐开发顺序
 
-第一批只推进 v0.1。v0.1 稳定后再引入受控执行。SCM 写入、AI 诊断和自动修复不得提前穿透版本门槛。
+第一批只推进 v0.1。v0.1 可提供专用私有状态目标的 reports-only 检查点，但不能运行项目命令或触碰业务分支。v0.1 稳定后再引入受控执行；PR/Issue 协作、AI 诊断和自动修复不得提前穿透版本门槛。
 
 这一路线的核心不是尽快做成“自动写代码机器人”，而是先把项目真实状态、执行证据和停止能力做成可靠基础设施。
