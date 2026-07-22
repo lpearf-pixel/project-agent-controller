@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -6,19 +6,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from project_agent_controller import __version__
 from project_agent_controller.curation.briefs import BriefExportBlocked
 from project_agent_controller.observer.runner import ObservationBlocked
-from project_agent_controller.runtime import Runtime
+
+if TYPE_CHECKING:
+    from project_agent_controller.runtime import Runtime
 
 router = APIRouter()
 
 
 class ControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     actor: str = Field(min_length=1, max_length=120)
     reason: str = Field(min_length=1, max_length=500)
 
 
-def runtime_from(request: Request) -> Runtime:
+def runtime_from(request: Request) -> "Runtime":
     return request.app.state.runtime
 
 
@@ -46,6 +47,19 @@ def list_projects(request: Request) -> list[dict[str, object]]:
             ],
         }
         for project in runtime.registry.list()
+    ]
+
+
+@router.get("/v1/projects/{project_id}/sources")
+def list_source_states(project_id: str, request: Request) -> list[dict[str, Any]]:
+    runtime = runtime_from(request)
+    try:
+        runtime.registry.get(project_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return [
+        state.model_dump(mode="json")
+        for state in runtime.source_states.list(project_id)
     ]
 
 

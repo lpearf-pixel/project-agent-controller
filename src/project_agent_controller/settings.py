@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 9090
     poll_interval_seconds: float = 1.0
+    docker_socket: Path | None = None
 
     @property
     def database_path(self) -> Path:

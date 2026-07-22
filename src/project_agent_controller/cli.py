@@ -18,7 +18,6 @@ app.add_typer(controller_app, name="controller")
 
 @app.command()
 def serve() -> None:
-    """Run the loopback-only HTTP service."""
     settings = Settings()
     application = create_app(settings)
     uvicorn.run(application, host=settings.host, port=settings.port)
@@ -26,7 +25,6 @@ def serve() -> None:
 
 @app.command()
 def status() -> None:
-    """Show controller state and registered projects."""
     runtime = build_runtime(Settings())
     typer.echo(
         json.dumps(
@@ -40,9 +38,24 @@ def status() -> None:
     )
 
 
+@app.command("sources")
+def sources(project_id: str) -> None:
+    """Show sanitized current process and Docker source states."""
+    runtime = build_runtime(Settings())
+    try:
+        runtime.registry.get(project_id)
+    except KeyError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=2) from error
+    payload = [
+        state.model_dump(mode="json")
+        for state in runtime.source_states.list(project_id)
+    ]
+    typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
 @app.command("observe-once")
 def observe_once(project_id: str) -> None:
-    """Read newly appended complete lines from one registered project."""
     runtime = build_runtime(Settings())
     try:
         emitted = runtime.observer.observe_once(runtime.registry.get(project_id))
@@ -53,7 +66,6 @@ def observe_once(project_id: str) -> None:
 
 @incident_app.command("show")
 def incident_show(incident_id: str, max_bytes: int = 65_536) -> None:
-    """Render one bounded, redacted AI Brief."""
     runtime = build_runtime(Settings())
     try:
         brief = runtime.brief_builder.build(incident_id, max_bytes=max_bytes)
