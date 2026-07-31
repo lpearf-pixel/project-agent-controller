@@ -20,6 +20,7 @@ def test_release_workflow_is_read_only_pinned_and_cross_platform() -> None:
     assert "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9" in text
     assert "./scripts/verify-v0.1c.sh" in text
     assert text.count("PAC_GITHUB_TOKEN: ${{ github.token }}") == 2
+    assert text.count("scripts/preflight-task-v0.2.py") == 2
     assert "scripts/preflight-docker-v0.1d.py" in text
     assert "pac service render" in text
     for forbidden in ("git push", "gh pr", "gh issue", "curl -x post", "permissions: write-all"):

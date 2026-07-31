@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -11,6 +12,23 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from project_agent_controller.domain.models import EventRecord
+
+
+@dataclass(frozen=True, slots=True)
+class StoredTaskRun:
+    run_id: str
+    project_id: str
+    task_id: str
+    idempotency_key: str
+    state: str
+    attempt_count: int
+    classification: str | None
+    exit_code: int | None
+    stdout: str
+    stderr: str
+    output_truncated: bool
+    created_at: datetime
+    finished_at: datetime | None
 
 
 class SourceCursor(BaseModel):
@@ -274,6 +292,209 @@ class Database:
         if row is None:
             raise RuntimeError("controller_state is not initialized")
         return str(row["state"])
+
+    @staticmethod
+    def _task_run_from_row(row: sqlite3.Row) -> StoredTaskRun:
+        finished = row["finished_at"]
+        return StoredTaskRun(
+            run_id=str(row["run_id"]),
+            project_id=str(row["project_id"]),
+            task_id=str(row["task_id"]),
+            idempotency_key=str(row["idempotency_key"]),
+            state=str(row["state"]),
+            attempt_count=int(row["attempt_count"]),
+            classification=(
+                None if row["classification"] is None else str(row["classification"])
+            ),
+            exit_code=None if row["exit_code"] is None else int(row["exit_code"]),
+            stdout=str(row["stdout"]),
+            stderr=str(row["stderr"]),
+            output_truncated=bool(row["output_truncated"]),
+            created_at=datetime.fromisoformat(str(row["created_at"])),
+            finished_at=None if finished is None else datetime.fromisoformat(str(finished)),
+        )
+
+    def get_task_run(
+        self, project_id: str, task_id: str, idempotency_key: str
+    ) -> StoredTaskRun | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM task_runs
+                WHERE project_id = ? AND task_id = ? AND idempotency_key = ?
+                """,
+                (project_id, task_id, idempotency_key),
+            ).fetchone()
+        return None if row is None else self._task_run_from_row(row)
+
+    def create_task_run(
+        self,
+        project_id: str,
+        task_id: str,
+        idempotency_key: str,
+        *,
+        created_at: datetime,
+    ) -> StoredTaskRun:
+        run_id = f"task-{uuid4()}"
+        with self._connect() as connection:
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO task_runs (
+                        run_id, project_id, task_id, idempotency_key, state, created_at
+                    ) VALUES (?, ?, ?, ?, 'running', ?)
+                    """,
+                    (run_id, project_id, task_id, idempotency_key, created_at.isoformat()),
+                )
+                connection.commit()
+            except sqlite3.IntegrityError:
+                connection.rollback()
+        existing = self.get_task_run(project_id, task_id, idempotency_key)
+        if existing is None:
+            raise RuntimeError("task run was not persisted")
+        return existing
+
+    def append_task_attempt(
+        self,
+        run_id: str,
+        attempt_number: int,
+        *,
+        classification: str,
+        exit_code: int | None,
+        stdout: str,
+        stderr: str,
+        output_truncated: bool,
+        occurred_at: datetime,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                INSERT INTO task_attempts (
+                    run_id, attempt_number, classification, exit_code,
+                    stdout, stderr, output_truncated, occurred_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    attempt_number,
+                    classification,
+                    exit_code,
+                    stdout,
+                    stderr,
+                    int(output_truncated),
+                    occurred_at.isoformat(),
+                ),
+            )
+            connection.execute(
+                "UPDATE task_runs SET attempt_count = ? WHERE run_id = ?",
+                (attempt_number, run_id),
+            )
+            connection.commit()
+
+    def finish_task_run(
+        self,
+        run_id: str,
+        *,
+        state: str,
+        classification: str,
+        exit_code: int | None,
+        stdout: str,
+        stderr: str,
+        output_truncated: bool,
+        finished_at: datetime,
+    ) -> StoredTaskRun:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE task_runs
+                SET state = ?, classification = ?, exit_code = ?, stdout = ?, stderr = ?,
+                    output_truncated = ?, finished_at = ?
+                WHERE run_id = ? AND state = 'running'
+                """,
+                (
+                    state,
+                    classification,
+                    exit_code,
+                    stdout,
+                    stderr,
+                    int(output_truncated),
+                    finished_at.isoformat(),
+                    run_id,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM task_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            connection.commit()
+        if row is None:
+            raise RuntimeError("task run disappeared")
+        return self._task_run_from_row(row)
+
+    def count_task_attempts(self, run_id: str) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) FROM task_attempts WHERE run_id = ?", (run_id,)
+            ).fetchone()
+        return 0 if row is None else int(row[0])
+
+    def claim_runner_circuit(
+        self,
+        project_id: str,
+        *,
+        threshold: int,
+        cooldown_seconds: int,
+        now: datetime,
+    ) -> bool:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM runner_circuits WHERE project_id = ?", (project_id,)
+            ).fetchone()
+            if row is None or int(row["consecutive_failures"]) < threshold:
+                connection.commit()
+                return True
+            opened_at = datetime.fromisoformat(str(row["opened_at"]))
+            elapsed = (now - opened_at).total_seconds()
+            if elapsed < cooldown_seconds or bool(row["probe_in_progress"]):
+                connection.commit()
+                return False
+            connection.execute(
+                "UPDATE runner_circuits SET probe_in_progress = 1 WHERE project_id = ?",
+                (project_id,),
+            )
+            connection.commit()
+            return True
+
+    def record_runner_success(self, project_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM runner_circuits WHERE project_id = ?", (project_id,))
+            connection.commit()
+
+    def record_runner_failure(
+        self, project_id: str, *, threshold: int, occurred_at: datetime
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT consecutive_failures FROM runner_circuits WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            failures = 1 if row is None else int(row[0]) + 1
+            opened_at = occurred_at.isoformat() if failures >= threshold else None
+            connection.execute(
+                """
+                INSERT INTO runner_circuits (
+                    project_id, consecutive_failures, opened_at, probe_in_progress
+                ) VALUES (?, ?, ?, 0)
+                ON CONFLICT(project_id) DO UPDATE SET
+                    consecutive_failures = excluded.consecutive_failures,
+                    opened_at = excluded.opened_at,
+                    probe_in_progress = 0
+                """,
+                (project_id, failures, opened_at),
+            )
+            connection.commit()
 
     def transition_controller_state(
         self,

@@ -1,6 +1,6 @@
 # 社区甄选 Project Agent Controller 宿主常驻手册
 
-本手册把 v0.1D 以只读 Observer 方式运行在 macOS 或 Linux 宿主。控制器不执行社区甄选项目命令，不修改 Git，不重跑 CI，不停止业务容器，也不写 PostgreSQL。
+本手册把守卫服务运行在 macOS 或 Linux 宿主。Observer 只读；v0.2 Runner 只执行项目配置中固定的验证任务。Runner 从已提交的 Git `HEAD` 创建临时归档副本，不修改业务工作树、不重跑 CI、不停止业务容器，也不写 PostgreSQL。
 
 ## 1. 准备私有配置
 
@@ -131,7 +131,19 @@ PAC_ENV_FILE="$PAC_ENV_FILE" "$PAC_REPO_DIR/.venv/bin/pac" \
   controller complete-recovery local-admin "preflight passed"
 ```
 
-## 6. 停止与卸载
+## 6. 运行受控验证任务
+
+首个社区甄选任务仅允许执行固定、无需安装依赖的 `node scripts/lint-placeholder.js`，不接受附加参数或环境变量：
+
+```bash
+pac task run community-selection-miniapp lint manual-20260731-001
+```
+
+第三个参数是幂等键；重复调用返回同一终态记录，不会再次执行。非零退出最多重试两次；项目连续三次失败后熔断五分钟。`DRAINING`、`DRAINED`、`EMERGENCY_STOP`、`RECOVERING` 或 `DEGRADED` 状态下不会启动新任务。
+
+支付、退款、库存修改、数据库迁移、生产部署、Git 写入和任意 shell 均未配置，不能通过此入口执行。
+
+## 7. 停止与卸载
 
 macOS 停止并取消注册：
 

@@ -54,6 +54,43 @@ CREATE TABLE IF NOT EXISTS control_events (
     occurred_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS task_runs (
+    run_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    state TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count BETWEEN 0 AND 3),
+    classification TEXT,
+    exit_code INTEGER,
+    stdout TEXT NOT NULL DEFAULT '',
+    stderr TEXT NOT NULL DEFAULT '',
+    output_truncated INTEGER NOT NULL DEFAULT 0 CHECK (output_truncated IN (0, 1)),
+    created_at TEXT NOT NULL,
+    finished_at TEXT,
+    UNIQUE(project_id, task_id, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS task_attempts (
+    run_id TEXT NOT NULL,
+    attempt_number INTEGER NOT NULL CHECK (attempt_number BETWEEN 1 AND 3),
+    classification TEXT NOT NULL,
+    exit_code INTEGER,
+    stdout TEXT NOT NULL,
+    stderr TEXT NOT NULL,
+    output_truncated INTEGER NOT NULL CHECK (output_truncated IN (0, 1)),
+    occurred_at TEXT NOT NULL,
+    PRIMARY KEY(run_id, attempt_number),
+    FOREIGN KEY(run_id) REFERENCES task_runs(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS runner_circuits (
+    project_id TEXT PRIMARY KEY,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0 CHECK (consecutive_failures >= 0),
+    opened_at TEXT,
+    probe_in_progress INTEGER NOT NULL DEFAULT 0 CHECK (probe_in_progress IN (0, 1))
+);
+
 CREATE TABLE IF NOT EXISTS incidents (
     incident_id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,

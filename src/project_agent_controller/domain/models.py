@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from enum import StrEnum
+from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -121,6 +122,71 @@ class GitHubCISourceConfig(BaseModel):
     max_failed_checks: int = Field(default=20, ge=1, le=50)
 
 
+class TaskTemplateConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    task_id: str = Field(pattern=SOURCE_ID_PATTERN)
+    repository_ref: str
+    working_directory: str = "."
+    executable: str = Field(min_length=1, max_length=120)
+    arguments: tuple[str, ...] = ()
+    environment: dict[str, str] = Field(default_factory=dict)
+    timeout_seconds: int = Field(default=900, ge=1, le=3600)
+    max_attempts: int = Field(default=1, ge=1, le=3)
+    output_max_bytes: int = Field(default=65_536, ge=1024, le=1_048_576)
+    circuit_failure_threshold: int = Field(default=3, ge=1, le=10)
+    circuit_cooldown_seconds: int = Field(default=300, ge=30, le=86400)
+
+    @field_validator("repository_ref")
+    @classmethod
+    def validate_repository_ref(cls, value: str) -> str:
+        checked = _validate_local_ref(value, "repository_ref")
+        relative = checked.removeprefix("local://")
+        path = PurePosixPath(relative)
+        if path.is_absolute() or ".." in path.parts or "\\" in relative or "\x00" in relative:
+            raise ValueError("repository_ref must stay inside the local repository root")
+        return checked
+
+    @field_validator("working_directory")
+    @classmethod
+    def validate_working_directory(cls, value: str) -> str:
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts or "\\" in value or "\x00" in value:
+            raise ValueError("working_directory must stay inside the archived repository")
+        return value
+
+    @field_validator("executable")
+    @classmethod
+    def validate_executable(cls, value: str) -> str:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,119}", value) is None:
+            raise ValueError("executable must be a bare command name")
+        return value
+
+    @field_validator("arguments")
+    @classmethod
+    def validate_arguments(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(value) > 64:
+            raise ValueError("arguments must contain at most 64 values")
+        if any("\x00" in argument or len(argument) > 512 for argument in value):
+            raise ValueError("arguments must not contain NUL or exceed 512 characters")
+        return value
+
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, value: dict[str, str]) -> dict[str, str]:
+        if len(value) > 32:
+            raise ValueError("environment must contain at most 32 entries")
+        for key, item in value.items():
+            if re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", key) is None:
+                raise ValueError("environment keys must be upper case names")
+            if re.search(r"(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE_KEY|API_KEY)", key):
+                raise ValueError("credential-shaped environment key is forbidden")
+            if key in {"HOME", "PATH", "SHELL", "TMPDIR", "XDG_CONFIG_HOME"}:
+                raise ValueError("runner-controlled environment key is forbidden")
+            if "\x00" in item or len(item) > 512:
+                raise ValueError("environment values must not contain NUL or exceed 512 characters")
+        return value
+
+
 type SourceConfig = Annotated[
     FileSourceConfig
     | ProcessSourceConfig
@@ -137,9 +203,13 @@ class ProjectConfig(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
     technologies: tuple[str, ...] = ()
     sources: tuple[SourceConfig, ...] = ()
+    tasks: tuple[TaskTemplateConfig, ...] = ()
 
     @model_validator(mode="after")
     def validate_ci_dependencies(self) -> ProjectConfig:
+        task_ids = [task.task_id for task in self.tasks]
+        if len(task_ids) != len(set(task_ids)):
+            raise ValueError("duplicate task_id")
         git_ids = {
             source.source_id for source in self.sources if isinstance(source, GitSourceConfig)
         }

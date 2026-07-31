@@ -8,6 +8,7 @@ import uvicorn
 from project_agent_controller.app import create_app
 from project_agent_controller.curation.briefs import BriefExportBlocked
 from project_agent_controller.observer.runner import ObservationBlocked
+from project_agent_controller.runner.service import TaskRunBlocked
 from project_agent_controller.runtime import build_runtime
 from project_agent_controller.service_environment import load_service_environment
 from project_agent_controller.service_renderer import ServiceRenderInput, write_service_definition
@@ -17,9 +18,11 @@ app = typer.Typer(no_args_is_help=True, help="Local Project Agent Controller")
 incident_app = typer.Typer(no_args_is_help=True, help="Inspect local incidents")
 controller_app = typer.Typer(no_args_is_help=True, help="Control local observer state")
 service_app = typer.Typer(no_args_is_help=True, help="Render host service definitions")
+task_app = typer.Typer(no_args_is_help=True, help="Run fixed verification tasks")
 app.add_typer(incident_app, name="incident")
 app.add_typer(controller_app, name="controller")
 app.add_typer(service_app, name="service")
+app.add_typer(task_app, name="task")
 _SOURCE_KINDS = frozenset({"process", "docker", "git", "github_ci"})
 
 
@@ -81,6 +84,43 @@ def observe_once(project_id: str) -> None:
     except (KeyError, ObservationBlocked) as error:
         raise typer.Exit(code=2) from error
     typer.echo(json.dumps({"project_id": project_id, "emitted_events": emitted}))
+
+
+@task_app.command("run")
+def task_run(project_id: str, task_id: str, idempotency_key: str) -> None:
+    runtime = build_runtime(Settings())
+    try:
+        result = runtime.tasks.run(
+            runtime.registry.get(project_id), task_id, idempotency_key
+        )
+    except (KeyError, ValueError, TaskRunBlocked) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=2) from error
+    typer.echo(
+        json.dumps(
+            {
+                "run_id": result.run_id,
+                "project_id": result.project_id,
+                "task_id": result.task_id,
+                "idempotency_key": result.idempotency_key,
+                "state": result.state,
+                "attempt_count": result.attempt_count,
+                "classification": result.classification,
+                "exit_code": result.exit_code,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "output_truncated": result.output_truncated,
+                "created_at": result.created_at.isoformat(),
+                "finished_at": (
+                    None if result.finished_at is None else result.finished_at.isoformat()
+                ),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
+    if result.state != "success":
+        raise typer.Exit(code=1)
 
 
 @incident_app.command("show")

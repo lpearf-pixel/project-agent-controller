@@ -40,6 +40,8 @@ from project_agent_controller.observer.process_source import ProcessSourceObserv
 from project_agent_controller.observer.runner import CIObserver, ObserverRunner
 from project_agent_controller.observer.state_store import SourceStateStore
 from project_agent_controller.registry.service import ProjectRegistry
+from project_agent_controller.runner.executor import TaskExecutor
+from project_agent_controller.runner.service import TaskRunnerService
 from project_agent_controller.settings import Settings
 from project_agent_controller.storage.database import Database
 
@@ -55,6 +57,7 @@ class Runtime:
     daemon: ObserverDaemon
     brief_builder: BriefBuilder
     knowledge_index: KnowledgeIndex
+    tasks: TaskRunnerService
 
 
 def build_runtime(settings: Settings) -> Runtime:
@@ -148,6 +151,16 @@ def build_runtime(settings: Settings) -> Runtime:
     knowledge_index = KnowledgeIndex(database)
     if settings.knowledge_dir is not None and settings.knowledge_dir.exists():
         knowledge_index.rebuild(settings.knowledge_dir)
+    tasks = TaskRunnerService(
+        database,
+        control,
+        TaskExecutor(
+            settings.local_repos_root,
+            settings.data_dir / "runner-workspaces",
+            settings.git_executable,
+            lambda: control.get_state().value == "ACTIVE",
+        ),
+    )
     return Runtime(
         settings=settings,
         database=database,
@@ -158,4 +171,5 @@ def build_runtime(settings: Settings) -> Runtime:
         daemon=daemon,
         brief_builder=brief_builder,
         knowledge_index=knowledge_index,
+        tasks=tasks,
     )
