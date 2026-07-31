@@ -68,7 +68,17 @@ with tempfile.TemporaryDirectory(prefix="pac-v02-preflight-") as temporary:
     first = service.run(project, "verify", "preflight-1")
     repeated = service.run(project, "verify", "preflight-1")
 
-    assert first.state == "success"
+    if first.state != "success":
+        raise AssertionError(
+            {
+                "state": first.state,
+                "classification": first.classification,
+                "exit_code": first.exit_code,
+                "stdout": first.stdout,
+                "stderr": first.stderr,
+                "output_truncated": first.output_truncated,
+            }
+        )
     assert repeated.run_id == first.run_id
     assert database.count_task_attempts(first.run_id) == 1
     assert not (repository / "generated.txt").exists()
