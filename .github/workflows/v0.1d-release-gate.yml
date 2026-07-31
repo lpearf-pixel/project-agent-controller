@@ -31,6 +31,7 @@ jobs:
       - name: Verify frozen observer release
         env:
           PAC_PREFLIGHT_GITHUB: "1"
+          PAC_GITHUB_TOKEN: ${{ github.token }}
           PAC_V01C_PUBLIC_REPOSITORY: ${{ github.repository }}
           PAC_V01C_PUBLIC_SHA: ${{ github.sha }}
         run: ./scripts/verify-v0.1c.sh
@@ -65,6 +66,7 @@ jobs:
       - name: Verify frozen observer release
         env:
           PAC_PREFLIGHT_GITHUB: "1"
+          PAC_GITHUB_TOKEN: ${{ github.token }}
           PAC_V01C_PUBLIC_REPOSITORY: ${{ github.repository }}
           PAC_V01C_PUBLIC_SHA: ${{ github.sha }}
         run: ./scripts/verify-v0.1c.sh
