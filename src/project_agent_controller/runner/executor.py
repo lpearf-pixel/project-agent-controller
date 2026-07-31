@@ -76,6 +76,7 @@ class TaskExecutor:
             with tempfile.TemporaryDirectory(prefix="task-", dir=self.data_dir) as temporary:
                 workspace = Path(temporary) / "workspace"
                 workspace.mkdir(mode=0o700)
+                workspace = workspace.resolve()
                 self._extract_head(repository, workspace)
                 if not self.execution_allowed():
                     return self._error("blocked", "controller does not allow task execution")

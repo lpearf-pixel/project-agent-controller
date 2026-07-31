@@ -176,3 +176,19 @@ def test_executor_stops_running_process_when_control_gate_closes(tmp_path: Path)
 
     assert result.classification == "blocked"
     assert result.exit_code is None
+
+
+def test_executor_canonicalizes_workspace_root_before_containment_check(
+    tmp_path: Path,
+) -> None:
+    root, _ = _repository(tmp_path)
+    real_data = tmp_path / "real-data"
+    real_data.mkdir()
+    linked_data = tmp_path / "linked-data"
+    linked_data.symlink_to(real_data, target_is_directory=True)
+    executor = TaskExecutor(root, linked_data)
+
+    result = executor.execute(_task("-c", "print('canonical')"))
+
+    assert result.classification == "success"
+    assert result.stdout == "canonical\n"
