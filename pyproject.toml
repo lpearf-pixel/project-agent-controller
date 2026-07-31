@@ -1,7 +1,7 @@
 [project]
 name = "project-agent-controller"
-version = "0.1.0a1"
-description = "Local-first multi-project observer and incident memory controller"
+version = "0.2.0a1"
+description = "Local-first multi-project observer and controlled verification runner"
 requires-python = ">=3.12,<3.14"
 dependencies = [
   "fastapi>=0.116,<0.130",

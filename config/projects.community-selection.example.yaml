@@ -3,6 +3,18 @@ projects:
   - project_id: community-selection-miniapp
     display_name: Community Selection Miniapp Production
     technologies: [typescript, nodejs, prisma, postgresql, docker]
+    tasks:
+      - task_id: lint
+        repository_ref: local://community-selection-miniapp
+        executable: node
+        arguments: [scripts/lint-placeholder.js]
+        environment:
+          CI: "1"
+        timeout_seconds: 300
+        max_attempts: 2
+        output_max_bytes: 65536
+        circuit_failure_threshold: 3
+        circuit_cooldown_seconds: 300
     sources:
       - source_id: repository
         kind: git

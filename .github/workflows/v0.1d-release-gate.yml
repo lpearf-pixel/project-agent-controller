@@ -1,4 +1,4 @@
-name: v0.1D Host Service Release Gate
+name: v0.2 Controlled Runner Release Gate
 
 on:
   pull_request:
@@ -35,6 +35,8 @@ jobs:
           PAC_V01C_PUBLIC_REPOSITORY: ${{ github.repository }}
           PAC_V01C_PUBLIC_SHA: ${{ github.sha }}
         run: ./scripts/verify-v0.1c.sh
+      - name: Verify v0.2 isolated task runner
+        run: uv run python scripts/preflight-task-v0.2.py
       - name: Start disposable Docker fixture
         run: >-
           docker run -d --name pac-v01d-preflight
@@ -70,6 +72,8 @@ jobs:
           PAC_V01C_PUBLIC_REPOSITORY: ${{ github.repository }}
           PAC_V01C_PUBLIC_SHA: ${{ github.sha }}
         run: ./scripts/verify-v0.1c.sh
+      - name: Verify v0.2 isolated task runner
+        run: uv run python scripts/preflight-task-v0.2.py
       - name: Verify LaunchAgent rendering
         run: |
           service_root="$(mktemp -d)"

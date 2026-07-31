@@ -16,6 +16,12 @@ def test_community_selection_example_combines_production_git_ci_and_docker_sourc
     assert len(config.projects) == 1
     project = config.projects[0]
     assert project.project_id == "community-selection-miniapp"
+    assert len(project.tasks) == 1
+    task = project.tasks[0]
+    assert task.task_id == "lint"
+    assert task.executable == "node"
+    assert task.arguments == ("scripts/lint-placeholder.js",)
+    assert task.repository_ref == "local://community-selection-miniapp"
     assert len({source.source_id for source in project.sources}) == len(project.sources)
 
     ci_source = next(

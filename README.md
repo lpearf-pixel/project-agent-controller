@@ -2,9 +2,9 @@
 
 面向个人多项目研发环境的本地优先常驻控制平面，用于增量观察日志、进程、Docker、Git 工作树和 CI 检查，保存可审计事件，聚合重复问题，生成受限 AI Brief，并读取私有 Prompt / Known Problem / Lesson 仓库。
 
-> 当前实现阶段：**v0.1D Host Service and Community Onboarding（Draft）**。
+> 当前实现阶段：**v0.2 Controlled Runner（Draft）**。
 >
-> v0.1C 仍然只观察：不执行项目命令、不修改 Git、不重跑 CI、不调用 AI、不写业务仓库，也不上传原始日志。
+> Observer 仍然只读；Runner 只执行固定模板，并在 committed `HEAD` 的临时归档副本中运行。它不修改业务工作树、不重跑 CI、不调用 AI，也不上传原始日志。
 
 ## 已实现
 
@@ -57,9 +57,20 @@
 - `clear-emergency-stop` 后必须显式 `complete-recovery`；
 - Ubuntu Docker GET-only 与 macOS LaunchAgent 公共 Runner 门禁。
 
+### v0.2 受控验证执行器
+
+- 项目级固定 executable、argv、环境和资源上限模板；
+- `git archive HEAD` 临时工作区，不复制未跟踪文件、忽略文件或 `.git`；
+- `shell=False`、临时 HOME、凭据环境隔离、输出限额与脱敏；
+- 超时终止完整进程组，最多三次 attempt；
+- SQLite 幂等请求和有界 attempt 审计；
+- 连续失败熔断、冷却后单探针与成功自动闭合；
+- 全局 drain、急停、恢复和 degraded 状态在进程启动前 fail-closed；
+- 社区甄选首个模板仅允许隔离执行无依赖安装的 lint 扫描入口。
+
 ## 明确未实现
 
-- test、lint、build、shell 或容器 exec；
+- 任意参数命令、shell 或容器 exec；
 - kill、terminate、stop、restart 或自动修复；
 - 模型调用；
 - 原始日志上传；
@@ -111,6 +122,7 @@ curl 'http://127.0.0.1:9090/v1/projects/chan-shuo/sources?kind=git'
 curl 'http://127.0.0.1:9090/v1/projects/chan-shuo/sources?kind=github_ci'
 uv run pac sources chan-shuo --kind git
 uv run pac sources chan-shuo --kind github_ci
+uv run pac task run community-selection-miniapp lint manual-20260731-001
 ```
 
 ## 停止
@@ -138,7 +150,7 @@ PAC_VERIFY_MODE=offline ./scripts/verify-v0.1c.sh
 ./scripts/verify-v0.1c.sh
 ```
 
-完整模式 fail-closed，要求 `uv.lock`、Ruff、mypy strict、pytest、真实临时 Git 预检、GitHub GET-only 预检和 Emergency Stop 门禁。
+完整模式 fail-closed，要求 `uv.lock`、Ruff、mypy strict、pytest、真实临时 Git、隔离任务、GitHub GET-only、Docker GET-only 和 Emergency Stop 门禁。
 
 ## 设计文档
 
@@ -154,3 +166,5 @@ PAC_VERIFY_MODE=offline ./scripts/verify-v0.1c.sh
 - [停止、熔断与恢复规范](docs/operations/stop-circuit-breaker-and-recovery.md)
 - [版本演进路线图](docs/roadmap/evolution-roadmap.md)
 - [社区甄选宿主常驻手册](docs/onboarding/community-selection-host-service.md)
+- [v0.2 Controlled Runner 设计](docs/superpowers/specs/2026-07-31-v0.2-controlled-runner-design.md)
+- [v0.2 实施计划](docs/superpowers/plans/2026-07-31-v0.2-controlled-runner.md)
