@@ -1,0 +1,48 @@
+config_version: 1
+projects:
+  - project_id: community-selection-miniapp
+    display_name: Community Selection Miniapp Production
+    technologies: [typescript, nodejs, prisma, postgresql, docker]
+    sources:
+      - source_id: repository
+        kind: git
+        path_ref: local://community-selection-miniapp
+        remote: origin
+        include_untracked: true
+        heartbeat_seconds: 900
+      - source_id: github-ci
+        kind: github_ci
+        provider_id: github-cloud
+        repository: lpearf-pixel/community-selection-miniapp
+        git_source_id: repository
+        heartbeat_seconds: 900
+        max_check_runs: 100
+        max_failed_checks: 20
+      - source_id: api-container
+        kind: docker
+        selector:
+          compose_project: community-selection-miniapp
+          compose_service: api
+        include_logs: true
+        log_tail_on_attach: 100
+        log_max_lines_per_cycle: 500
+        heartbeat_seconds: 300
+        memory_warning_bytes: 4294967296
+      - source_id: edge-container
+        kind: docker
+        selector:
+          compose_project: community-selection-miniapp
+          compose_service: edge
+        include_logs: true
+        log_tail_on_attach: 100
+        log_max_lines_per_cycle: 500
+        heartbeat_seconds: 300
+        memory_warning_bytes: 1073741824
+      - source_id: postgres-container
+        kind: docker
+        selector:
+          compose_project: community-selection-miniapp
+          compose_service: postgres
+        include_logs: false
+        heartbeat_seconds: 300
+        memory_warning_bytes: 6442450944

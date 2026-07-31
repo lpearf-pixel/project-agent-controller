@@ -6,18 +6,25 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PAC_", extra="forbid")
-
     data_dir: Path = Field(default=Path.home() / ".local/share/project-agent-controller")
     projects_file: Path = Field(
         default=Path.home() / ".config/project-agent-controller/projects.yaml"
+    )
+    scm_providers_file: Path = Field(
+        default=Path.home() / ".config/project-agent-controller/scm-providers.yaml"
     )
     knowledge_dir: Path | None = None
     local_sources_root: Path = Field(
         default=Path.home() / ".local/share/project-agent-controller/sources"
     )
+    local_repos_root: Path = Field(
+        default=Path.home() / ".local/share/project-agent-controller/repos"
+    )
     host: str = "127.0.0.1"
     port: int = 9090
     poll_interval_seconds: float = 1.0
+    docker_socket: Path | None = None
+    git_executable: Path | None = None
 
     @property
     def database_path(self) -> Path:

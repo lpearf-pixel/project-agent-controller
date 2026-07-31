@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -6,20 +6,22 @@ from pydantic import BaseModel, ConfigDict, Field
 from project_agent_controller import __version__
 from project_agent_controller.curation.briefs import BriefExportBlocked
 from project_agent_controller.observer.runner import ObservationBlocked
-from project_agent_controller.runtime import Runtime
+
+if TYPE_CHECKING:
+    from project_agent_controller.runtime import Runtime
 
 router = APIRouter()
+_SOURCE_KINDS = frozenset({"process", "docker", "git", "github_ci"})
 
 
 class ControlRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     actor: str = Field(min_length=1, max_length=120)
     reason: str = Field(min_length=1, max_length=500)
 
 
-def runtime_from(request: Request) -> Runtime:
-    return request.app.state.runtime
+def runtime_from(request: Request) -> "Runtime":
+    return cast("Runtime", request.app.state.runtime)
 
 
 @router.get("/health")
@@ -41,11 +43,33 @@ def list_projects(request: Request) -> list[dict[str, object]]:
             "display_name": project.display_name,
             "technologies": list(project.technologies),
             "sources": [
-                {"source_id": source.source_id, "kind": source.kind}
-                for source in project.sources
+                {"source_id": source.source_id, "kind": source.kind} for source in project.sources
             ],
         }
         for project in runtime.registry.list()
+    ]
+
+
+@router.get("/v1/projects/{project_id}/sources")
+def list_source_states(
+    project_id: str,
+    request: Request,
+    kind: Annotated[
+        str | None,
+        Query(pattern=r"^(process|docker|git|github_ci)$"),
+    ] = None,
+) -> list[dict[str, Any]]:
+    runtime = runtime_from(request)
+    try:
+        runtime.registry.get(project_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if kind is not None and kind not in _SOURCE_KINDS:
+        raise HTTPException(status_code=422, detail=f"unsupported source kind: {kind}")
+    return [
+        state.model_dump(mode="json")
+        for state in runtime.source_states.list(project_id)
+        if kind is None or state.source_kind == kind
     ]
 
 

@@ -22,8 +22,7 @@ def error_event(index: int, line: str | None = None) -> EventRecord:
         occurred_at=datetime(2026, 7, 22, tzinfo=UTC) + timedelta(seconds=index),
         payload={
             "line": line
-            or f"2026-07-22T10:20:{index:02d}Z pid={1000 + index} "
-            "ERROR E1234 lib=1.2.3"
+            or f"2026-07-22T10:20:{index:02d}Z pid={1000 + index} ERROR E1234 lib=1.2.3"
         },
         evidence_ref=f"artifact://sha256/{index:064x}",
     )
