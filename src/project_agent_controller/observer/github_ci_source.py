@@ -70,9 +70,7 @@ class GitHubCISourceObserver:
                     "blocked_reason": reason,
                     "error_kind": None,
                     "backoff_until": None,
-                    "last_heartbeat_at": state.get(
-                        "last_heartbeat_at", observed_at.isoformat()
-                    ),
+                    "last_heartbeat_at": state.get("last_heartbeat_at", observed_at.isoformat()),
                 }
             )
             return SourceObservation(
@@ -115,9 +113,10 @@ class GitHubCISourceObserver:
                 "auth_failed": "ci.auth.failed",
             }.get(error.kind, "ci.unavailable")
             events = []
-            if previous_state.get("available") is not False or previous_state.get(
-                "error_kind"
-            ) != error.kind:
+            if (
+                previous_state.get("available") is not False
+                or previous_state.get("error_kind") != error.kind
+            ):
                 sequence += 1
                 events.append(
                     self._event(
@@ -150,9 +149,7 @@ class GitHubCISourceObserver:
                     "backoff_attempt": attempt,
                     "backoff_until": until.isoformat(),
                     "head_sha": head_sha,
-                    "last_heartbeat_at": state.get(
-                        "last_heartbeat_at", observed_at.isoformat()
-                    ),
+                    "last_heartbeat_at": state.get("last_heartbeat_at", observed_at.isoformat()),
                 }
             )
             return SourceObservation(
@@ -250,9 +247,7 @@ class GitHubCISourceObserver:
                         observed_at,
                     )
                 )
-            previous_ids = {
-                str(item) for item in previous_state.get("failed_identities", [])
-            }
+            previous_ids = {str(item) for item in previous_state.get("failed_identities", [])}
             for check in snapshot.failed_checks:
                 identity = self._identity(snapshot.head_sha, check.name, check.conclusion)
                 if identity in previous_ids:
@@ -281,7 +276,7 @@ class GitHubCISourceObserver:
                 material = (
                     f"{source.provider_id}\0{source.repository}\0{head_sha}\0"
                     f"{check.name}\0{check.conclusion}"
-                ).encode("utf-8")
+                ).encode()
                 incidents.append((f"fp-{sha256(material).hexdigest()[:24]}", event))
             if previous_head == head_sha:
                 recovered = previous_ids - failed_identities
@@ -355,9 +350,7 @@ class GitHubCISourceObserver:
     @staticmethod
     def _failed_identities(snapshot: CISnapshot) -> set[str]:
         return {
-            GitHubCISourceObserver._identity(
-                snapshot.head_sha, check.name, check.conclusion
-            )
+            GitHubCISourceObserver._identity(snapshot.head_sha, check.name, check.conclusion)
             for check in snapshot.failed_checks
         }
 
@@ -366,9 +359,7 @@ class GitHubCISourceObserver:
         return f"{head_sha}:{name}:{conclusion}"
 
     @staticmethod
-    def _backoff_until(
-        now: datetime, error: GitHubTransportError, attempt: int
-    ) -> datetime:
+    def _backoff_until(now: datetime, error: GitHubTransportError, attempt: int) -> datetime:
         if error.kind == "rate_limited" and error.rate_limit_reset is not None:
             reset = datetime.fromtimestamp(error.rate_limit_reset, tz=UTC)
             if reset > now:

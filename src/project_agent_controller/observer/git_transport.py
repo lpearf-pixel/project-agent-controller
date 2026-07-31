@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Protocol
 
 
 class GitTransportError(RuntimeError):
@@ -77,10 +78,7 @@ class GitReadTransport:
                 f"git executable unavailable: {type(error).__name__}"
             ) from error
 
-        if (
-            len(result.stdout) > self.max_output_bytes
-            or len(result.stderr) > self.max_output_bytes
-        ):
+        if len(result.stdout) > self.max_output_bytes or len(result.stderr) > self.max_output_bytes:
             raise GitTransportError(f"git output exceeds {self.max_output_bytes} bytes")
         stderr = result.stderr.decode("utf-8", errors="replace").strip()
         if result.returncode != 0:

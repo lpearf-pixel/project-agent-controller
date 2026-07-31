@@ -27,17 +27,17 @@ from project_agent_controller.observer.git_provider import (
     GitRepositoryProvider,
     UnavailableGitProvider,
 )
-from project_agent_controller.observer.git_source import GitSourceObserver
+from project_agent_controller.observer.git_source import GitSnapshotProvider, GitSourceObserver
 from project_agent_controller.observer.git_transport import GitReadTransport
 from project_agent_controller.observer.github_ci_provider import (
     GitHubCIProvider,
     UnavailableCIProvider,
 )
-from project_agent_controller.observer.github_ci_source import GitHubCISourceObserver
+from project_agent_controller.observer.github_ci_source import CIProvider, GitHubCISourceObserver
 from project_agent_controller.observer.github_transport import GitHubReadTransport
 from project_agent_controller.observer.process_provider import PsutilProcessProvider
 from project_agent_controller.observer.process_source import ProcessSourceObserver
-from project_agent_controller.observer.runner import ObserverRunner
+from project_agent_controller.observer.runner import CIObserver, ObserverRunner
 from project_agent_controller.observer.state_store import SourceStateStore
 from project_agent_controller.registry.service import ProjectRegistry
 from project_agent_controller.settings import Settings
@@ -96,7 +96,7 @@ def build_runtime(settings: Settings) -> Runtime:
     if any(isinstance(source, GitSourceConfig) for source in all_sources):
         executable = settings.git_executable
         if executable is None or not executable.exists():
-            git_provider = UnavailableGitProvider()
+            git_provider: GitSnapshotProvider = UnavailableGitProvider()
         else:
             git_provider = GitRepositoryProvider(
                 settings.local_repos_root,
@@ -104,16 +104,14 @@ def build_runtime(settings: Settings) -> Runtime:
             )
         git_observer = GitSourceObserver(git_provider)
 
-    ci_observers: dict[str, GitHubCISourceObserver] = {}
+    ci_observers: dict[str, CIObserver] = {}
     ci_provider_ids = {
-        source.provider_id
-        for source in all_sources
-        if isinstance(source, GitHubCISourceConfig)
+        source.provider_id for source in all_sources if isinstance(source, GitHubCISourceConfig)
     }
     for provider_id in sorted(ci_provider_ids):
         config = provider_map.get(provider_id)
         if config is None:
-            ci_provider = UnavailableCIProvider(
+            ci_provider: CIProvider = UnavailableCIProvider(
                 f"SCM provider is not configured: {provider_id}"
             )
         else:

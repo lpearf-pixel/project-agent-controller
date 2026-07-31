@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -297,9 +297,7 @@ class Database:
             if current not in allowed_from:
                 connection.rollback()
                 allowed = ", ".join(sorted(allowed_from))
-                raise ValueError(
-                    f"cannot transition from {current}; expected one of: {allowed}"
-                )
+                raise ValueError(f"cannot transition from {current}; expected one of: {allowed}")
             try:
                 connection.execute(
                     """

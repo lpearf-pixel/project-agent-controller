@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 import httpx
 import pytest
 
@@ -64,7 +62,9 @@ def test_transport_sets_headers_and_supports_etag(monkeypatch) -> None:
 
 def test_transport_returns_not_modified() -> None:
     client = httpx.Client(
-        transport=httpx.MockTransport(lambda _request: httpx.Response(304, headers={"ETag": '"x"'})),
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(304, headers={"ETag": '"x"'})
+        ),
         follow_redirects=False,
     )
     transport = GitHubReadTransport("https://api.github.com", client=client)

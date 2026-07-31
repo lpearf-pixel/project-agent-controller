@@ -82,7 +82,7 @@ def project() -> ProjectConfig:
                     "git_source_id": "repository",
                 },
                 {
-                    "source_id: "repository",
+                    "source_id": "repository",
                     "kind": "git",
                     "path_ref": "local://repos/demo",
                 },

@@ -27,12 +27,8 @@ class GitHubTransportError(RuntimeError):
 
 
 _ALLOWED_PATHS = (
-    re.compile(
-        r"^/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/commits/[0-9a-f]{40}/check-runs$"
-    ),
-    re.compile(
-        r"^/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/commits/[0-9a-f]{40}/status$"
-    ),
+    re.compile(r"^/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/commits/[0-9a-f]{40}/check-runs$"),
+    re.compile(r"^/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/commits/[0-9a-f]{40}/status$"),
 )
 
 

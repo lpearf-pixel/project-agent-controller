@@ -2,7 +2,7 @@
 
 面向个人多项目研发环境的本地优先常驻控制平面，用于增量观察日志、进程、Docker、Git 工作树和 CI 检查，保存可审计事件，聚合重复问题，生成受限 AI Brief，并读取私有 Prompt / Known Problem / Lesson 仓库。
 
-> 当前实现阶段：**v0.1C Git / CI Observers（Draft）**。
+> 当前实现阶段：**v0.1D Host Service and Community Onboarding（Draft）**。
 >
 > v0.1C 仍然只观察：不执行项目命令、不修改 Git、不重跑 CI、不调用 AI、不写业务仓库，也不上传原始日志。
 
@@ -47,6 +47,15 @@
 - CI 错误按 HEAD SHA + check name + conclusion 建立身份并进入 Incident；
 - `GET /v1/projects/{project_id}/sources?kind=git|github_ci`；
 - `pac sources <project-id> --kind git|github_ci`。
+
+### v0.1D 宿主常驻与社区甄选接入
+
+- 私有、0600、64 KiB 上限的 `PAC_ENV_FILE`，只接受 PAC 与代理键；
+- launchd/systemd 用户服务的确定性 render-only 生成；
+- 异常重启限速，不自动清除 drain、急停或恢复状态；
+- 社区甄选生产 `api`、`edge`、`postgres`、Git 与 CI 的统一只读模板；
+- `clear-emergency-stop` 后必须显式 `complete-recovery`；
+- Ubuntu Docker GET-only 与 macOS LaunchAgent 公共 Runner 门禁。
 
 ## 明确未实现
 
@@ -107,9 +116,10 @@ uv run pac sources chan-shuo --kind github_ci
 ## 停止
 
 ```bash
-uv run pac controller drain --actor local-admin --reason maintenance
-uv run pac controller emergency-stop --actor local-admin --reason 'unexpected activity'
-uv run pac controller clear-emergency-stop --actor local-admin --reason 'risk removed'
+uv run pac controller drain local-admin maintenance
+uv run pac controller emergency-stop local-admin 'unexpected activity'
+uv run pac controller clear-emergency-stop local-admin 'risk removed'
+uv run pac controller complete-recovery local-admin 'preflight passed'
 ```
 
 解除 Emergency Stop 只进入 `RECOVERING`，不会自动恢复观察或重跑任务。
@@ -143,3 +153,4 @@ PAC_VERIFY_MODE=offline ./scripts/verify-v0.1c.sh
 - [SCM 可迁移与私有 Git 设计](docs/architecture/scm-portability-and-private-git.md)
 - [停止、熔断与恢复规范](docs/operations/stop-circuit-breaker-and-recovery.md)
 - [版本演进路线图](docs/roadmap/evolution-roadmap.md)
+- [社区甄选宿主常驻手册](docs/onboarding/community-selection-host-service.md)

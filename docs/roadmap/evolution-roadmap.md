@@ -66,6 +66,14 @@ flowchart LR
 - reports-only 同步幂等且不触碰业务分支；
 - 无敏感信息进入报告。
 
+### v0.1D 宿主常驻门禁
+
+- macOS LaunchAgent 与 Linux systemd user service 只生成定义，不在测试中安装；
+- 私有环境文件权限、大小和键白名单 fail-closed；
+- 社区甄选生产 Git、CI、API、edge 与 PostgreSQL Source 使用精确声明；
+- Ubuntu 公共 Runner 完成真实 Docker GET-only 预检；
+- Emergency Stop 解除后必须经过 `RECOVERING` 和显式完成恢复。
+
 ## 4. v0.2 Controlled Runner：受控执行
 
 ### 目标

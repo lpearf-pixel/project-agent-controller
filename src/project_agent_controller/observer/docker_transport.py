@@ -4,8 +4,9 @@ import http.client
 import json
 import re
 import socket
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 from urllib.parse import urlencode, urlsplit
 
 
@@ -92,9 +93,7 @@ class UnixSocketDockerTransport:
                 )
             if response.status < 200 or response.status >= 300:
                 message = body.decode("utf-8", errors="replace")[:300]
-                raise DockerTransportError(
-                    f"Docker HTTP {response.status}: {message}"
-                )
+                raise DockerTransportError(f"Docker HTTP {response.status}: {message}")
             return body
         except OSError as error:
             raise DockerTransportError(f"Docker endpoint unavailable: {error}") from error

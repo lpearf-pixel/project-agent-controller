@@ -89,6 +89,19 @@ class ControlService:
         )
         return ControllerState.RECOVERING
 
+    def complete_recovery(self, *, actor: str, reason: str) -> ControllerState:
+        self._validate_actor_reason(actor, reason)
+        state = self.get_state()
+        if state is not ControllerState.RECOVERING:
+            raise ValueError("controller is not in RECOVERING")
+        self._transition(
+            ControllerState.RECOVERING,
+            ControllerState.ACTIVE,
+            actor=actor,
+            reason=reason,
+        )
+        return ControllerState.ACTIVE
+
     def _transition(
         self,
         current: ControllerState,

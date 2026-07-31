@@ -61,8 +61,12 @@ def test_available_dirty_head_and_clean_transitions() -> None:
     )
     observer = GitSourceObserver(provider)
     first = observer.observe("demo", "run-1", source(), None, now=now)
-    second = observer.observe("demo", "run-1", source(), first.state, now=now + timedelta(seconds=1))
-    third = observer.observe("demo", "run-1", source(), second.state, now=now + timedelta(seconds=2))
+    second = observer.observe(
+        "demo", "run-1", source(), first.state, now=now + timedelta(seconds=1)
+    )
+    third = observer.observe(
+        "demo", "run-1", source(), second.state, now=now + timedelta(seconds=2)
+    )
 
     assert [event.event_type for event in first.events] == ["git.available"]
     assert [event.event_type for event in second.events] == ["git.dirty.entered"]
@@ -79,9 +83,15 @@ def test_conflict_creates_one_incident_and_recovery_event() -> None:
     provider = Provider([snap(), conflict, conflict, snap()])
     observer = GitSourceObserver(provider)
     first = observer.observe("demo", "run-1", source(), None, now=now)
-    entered = observer.observe("demo", "run-1", source(), first.state, now=now + timedelta(seconds=1))
-    stable = observer.observe("demo", "run-1", source(), entered.state, now=now + timedelta(seconds=2))
-    cleared = observer.observe("demo", "run-1", source(), stable.state, now=now + timedelta(seconds=3))
+    entered = observer.observe(
+        "demo", "run-1", source(), first.state, now=now + timedelta(seconds=1)
+    )
+    stable = observer.observe(
+        "demo", "run-1", source(), entered.state, now=now + timedelta(seconds=2)
+    )
+    cleared = observer.observe(
+        "demo", "run-1", source(), stable.state, now=now + timedelta(seconds=3)
+    )
 
     assert [event.event_type for event in entered.events] == [
         "git.dirty.entered",
@@ -103,8 +113,12 @@ def test_provider_error_is_coalesced_and_recovers() -> None:
     provider = Provider([error, error, snap()])
     observer = GitSourceObserver(provider)
     first = observer.observe("demo", "run-1", source(), None, now=now)
-    second = observer.observe("demo", "run-1", source(), first.state, now=now + timedelta(seconds=1))
-    third = observer.observe("demo", "run-1", source(), second.state, now=now + timedelta(seconds=2))
+    second = observer.observe(
+        "demo", "run-1", source(), first.state, now=now + timedelta(seconds=1)
+    )
+    third = observer.observe(
+        "demo", "run-1", source(), second.state, now=now + timedelta(seconds=2)
+    )
 
     assert [event.event_type for event in first.events] == ["git.provider.unavailable"]
     assert second.events == ()
@@ -121,7 +135,9 @@ def test_detached_and_ahead_behind_transitions() -> None:
     )
     observer = GitSourceObserver(provider)
     first = observer.observe("demo", "run-1", source(), None, now=now)
-    second = observer.observe("demo", "run-1", source(), first.state, now=now + timedelta(seconds=1))
+    second = observer.observe(
+        "demo", "run-1", source(), first.state, now=now + timedelta(seconds=1)
+    )
     assert [event.event_type for event in second.events] == [
         "git.branch.changed",
         "git.detached.entered",

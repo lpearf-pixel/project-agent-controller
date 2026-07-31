@@ -38,9 +38,10 @@ class GitSourceObserver:
             snapshot = self.provider.snapshot(source)
         except (GitTransportError, ValueError) as error:
             error_kind = type(error).__name__
-            if previous_state.get("available") is not False or previous_state.get(
-                "error_kind"
-            ) != error_kind:
+            if (
+                previous_state.get("available") is not False
+                or previous_state.get("error_kind") != error_kind
+            ):
                 sequence += 1
                 events.append(
                     self._event(
@@ -126,16 +127,12 @@ class GitSourceObserver:
                 events.append(event)
                 if event_type == "git.conflict.entered":
                     material = (
-                        f"{project_id}\0{source.source_id}\0"
-                        f"{current.get('head_sha')}\0git.conflict"
-                    ).encode("utf-8")
-                    incidents.append(
-                        (f"fp-{sha256(material).hexdigest()[:24]}", event)
-                    )
+                        f"{project_id}\0{source.source_id}\0{current.get('head_sha')}\0git.conflict"
+                    ).encode()
+                    incidents.append((f"fp-{sha256(material).hexdigest()[:24]}", event))
             if not transitions and (
                 last_heartbeat is None
-                or (observed_at - last_heartbeat).total_seconds()
-                >= source.heartbeat_seconds
+                or (observed_at - last_heartbeat).total_seconds() >= source.heartbeat_seconds
             ):
                 sequence += 1
                 events.append(
@@ -196,9 +193,7 @@ class GitSourceObserver:
         if bool(previous.get("detached")) != bool(current.get("detached")):
             items.append(
                 (
-                    "git.detached.entered"
-                    if current.get("detached")
-                    else "git.detached.cleared",
+                    "git.detached.entered" if current.get("detached") else "git.detached.cleared",
                     Severity.WARNING if current.get("detached") else Severity.INFO,
                     {},
                 )
@@ -206,23 +201,17 @@ class GitSourceObserver:
         if bool(previous.get("dirty")) != bool(current.get("dirty")):
             items.append(
                 (
-                    (
-                        "git.dirty.entered"
-                        if current.get("dirty")
-                        else "git.dirty.cleared"
-                    ),
+                    ("git.dirty.entered" if current.get("dirty") else "git.dirty.cleared"),
                     Severity.WARNING if current.get("dirty") else Severity.INFO,
                     GitSourceObserver._counts(current),
                 )
             )
-        previous_conflicts = int(previous.get("conflict_count") or 0)
-        current_conflicts = int(current.get("conflict_count") or 0)
+        previous_conflicts = GitSourceObserver._int_value(previous.get("conflict_count"))
+        current_conflicts = GitSourceObserver._int_value(current.get("conflict_count"))
         if (previous_conflicts == 0) != (current_conflicts == 0):
             items.append(
                 (
-                    "git.conflict.entered"
-                    if current_conflicts > 0
-                    else "git.conflict.cleared",
+                    "git.conflict.entered" if current_conflicts > 0 else "git.conflict.cleared",
                     Severity.ERROR if current_conflicts > 0 else Severity.INFO,
                     {
                         "conflict_count": current_conflicts,
@@ -230,7 +219,9 @@ class GitSourceObserver:
                     },
                 )
             )
-        if int(previous.get("ahead") or 0) != int(current.get("ahead") or 0):
+        if GitSourceObserver._int_value(previous.get("ahead")) != GitSourceObserver._int_value(
+            current.get("ahead")
+        ):
             items.append(
                 (
                     "git.ahead.changed",
@@ -241,7 +232,9 @@ class GitSourceObserver:
                     },
                 )
             )
-        if int(previous.get("behind") or 0) != int(current.get("behind") or 0):
+        if GitSourceObserver._int_value(previous.get("behind")) != GitSourceObserver._int_value(
+            current.get("behind")
+        ):
             items.append(
                 (
                     "git.behind.changed",
@@ -262,6 +255,17 @@ class GitSourceObserver:
             "untracked_count": state.get("untracked_count", 0),
             "conflict_count": state.get("conflict_count", 0),
         }
+
+    @staticmethod
+    def _int_value(value: object) -> int:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return 0
+        return 0
 
     @staticmethod
     def _summary(state: dict[str, object]) -> dict[str, object]:

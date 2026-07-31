@@ -42,9 +42,13 @@ def test_provider_normalizes_failure_and_truncates_summary() -> None:
         ],
     }
     statuses = {"state": "success", "total_count": 1, "statuses": []}
-    provider = GitHubCIProvider(Transport([response(checks, etag='"c"'), response(statuses, etag='"s"')]))
+    provider = GitHubCIProvider(
+        Transport([response(checks, etag='"c"'), response(statuses, etag='"s"')])
+    )
 
-    snapshot = provider.snapshot("owner/repo", "a" * 40, previous=None, max_check_runs=100, max_failed_checks=20)
+    snapshot = provider.snapshot(
+        "owner/repo", "a" * 40, previous=None, max_check_runs=100, max_failed_checks=20
+    )
 
     assert snapshot.overall == "failure"
     assert snapshot.total_checks == 4
@@ -59,13 +63,13 @@ def test_provider_normalizes_failure_and_truncates_summary() -> None:
 def test_provider_handles_pending_and_no_checks() -> None:
     pending_checks = {
         "total_count": 1,
-        "check_runs": [
-            {"id": 1, "name": "tests", "status": "in_progress", "conclusion": None}
-        ],
+        "check_runs": [{"id": 1, "name": "tests", "status": "in_progress", "conclusion": None}],
     }
     empty_status = {"state": "pending", "total_count": 0, "statuses": []}
     provider = GitHubCIProvider(Transport([response(pending_checks), response(empty_status)]))
-    pending = provider.snapshot("owner/repo", "b" * 40, previous=None, max_check_runs=100, max_failed_checks=20)
+    pending = provider.snapshot(
+        "owner/repo", "b" * 40, previous=None, max_check_runs=100, max_failed_checks=20
+    )
     assert pending.overall == "pending"
 
     provider = GitHubCIProvider(
@@ -76,7 +80,9 @@ def test_provider_handles_pending_and_no_checks() -> None:
             ]
         )
     )
-    empty = provider.snapshot("owner/repo", "b" * 40, previous=None, max_check_runs=100, max_failed_checks=20)
+    empty = provider.snapshot(
+        "owner/repo", "b" * 40, previous=None, max_check_runs=100, max_failed_checks=20
+    )
     assert empty.overall == "no_checks"
     assert empty.total_checks == 0
 
@@ -104,7 +110,9 @@ def test_provider_uses_previous_endpoint_summary_on_304() -> None:
             ]
         )
     )
-    snapshot = provider.snapshot("owner/repo", "c" * 40, previous=previous, max_check_runs=100, max_failed_checks=20)
+    snapshot = provider.snapshot(
+        "owner/repo", "c" * 40, previous=previous, max_check_runs=100, max_failed_checks=20
+    )
     assert snapshot.overall == "success"
     assert snapshot.not_modified is True
     assert snapshot.total_checks == 2
@@ -129,6 +137,8 @@ def test_provider_limits_failed_checks() -> None:
             ]
         )
     )
-    snapshot = provider.snapshot("owner/repo", "d" * 40, previous=None, max_check_runs=100, max_failed_checks=2)
+    snapshot = provider.snapshot(
+        "owner/repo", "d" * 40, previous=None, max_check_runs=100, max_failed_checks=2
+    )
     assert len(snapshot.failed_checks) == 2
     assert snapshot.failure_count == 5

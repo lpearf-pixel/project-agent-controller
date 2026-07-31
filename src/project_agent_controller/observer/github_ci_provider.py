@@ -149,8 +149,7 @@ class GitHubCIProvider:
             legacy_summary=legacy_summary,
             etag_check_runs=check_response.etag
             or self._optional_str(previous.get("etag_check_runs")),
-            etag_status=status_response.etag
-            or self._optional_str(previous.get("etag_status")),
+            etag_status=status_response.etag or self._optional_str(previous.get("etag_status")),
             rate_limit_remaining=min(remaining_values) if remaining_values else None,
             rate_limit_reset=max(reset_values) if reset_values else None,
             not_modified=check_response.not_modified and status_response.not_modified,
@@ -176,19 +175,14 @@ class GitHubCIProvider:
             elif conclusion_text in _FAILURE_CONCLUSIONS:
                 counts["failure"] += 1
                 if len(failed) < max_failed_checks:
-                    output = (
-                        raw.get("output")
-                        if isinstance(raw.get("output"), dict)
-                        else {}
-                    )
+                    output_value: object = raw.get("output")
+                    output = output_value if isinstance(output_value, dict) else {}
                     failed.append(
                         {
                             "name": str(raw.get("name") or "unnamed-check")[:200],
                             "conclusion": conclusion_text,
                             "details_url": cls._optional_str(raw.get("details_url")),
-                            "summary": cls._truncate_utf8(
-                                str(output.get("summary") or ""), 512
-                            ),
+                            "summary": cls._truncate_utf8(str(output.get("summary") or ""), 512),
                             "provider_object_id": str(raw.get("id") or "unknown"),
                         }
                     )

@@ -4,6 +4,19 @@ set -euo pipefail
 MODE="${PAC_VERIFY_MODE:-full}"
 export PYTHONPATH="${PYTHONPATH:-src}"
 
+if [[ "${PAC_VERIFY_IN_UV:-0}" != "1" ]]; then
+  command -v uv >/dev/null 2>&1 || {
+    echo "uv is required for v0.1C verification" >&2
+    exit 1
+  }
+  [[ -f uv.lock ]] || {
+    echo "uv.lock is required for v0.1C verification" >&2
+    exit 1
+  }
+  export PAC_VERIFY_IN_UV=1
+  exec uv run --frozen "$0" "$@"
+fi
+
 python3 - <<'PY'
 from pathlib import Path
 

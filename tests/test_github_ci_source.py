@@ -88,7 +88,9 @@ def test_missing_git_state_is_blocked_and_coalesced() -> None:
     provider = Provider([])
     observer = GitHubCISourceObserver(provider)
     first = observer.observe("demo", "run-1", source(), None, None, now=now)
-    second = observer.observe("demo", "run-1", source(), None, first.state, now=now + timedelta(seconds=1))
+    second = observer.observe(
+        "demo", "run-1", source(), None, first.state, now=now + timedelta(seconds=1)
+    )
     assert [event.event_type for event in first.events] == ["ci.blocked.missing_git_state"]
     assert second.events == ()
     assert provider.calls == 0
@@ -113,15 +115,27 @@ def test_new_failed_check_creates_one_incident_and_recovers() -> None:
     )
     observer = GitHubCISourceObserver(provider)
     first = observer.observe("demo", "run-1", source(), git_state(), None, now=now)
-    entered = observer.observe("demo", "run-1", source(), git_state(), first.state, now=now + timedelta(seconds=1))
-    stable = observer.observe("demo", "run-1", source(), git_state(), entered.state, now=now + timedelta(seconds=2))
-    cleared = observer.observe("demo", "run-1", source(), git_state(), stable.state, now=now + timedelta(seconds=3))
+    entered = observer.observe(
+        "demo", "run-1", source(), git_state(), first.state, now=now + timedelta(seconds=1)
+    )
+    stable = observer.observe(
+        "demo", "run-1", source(), git_state(), entered.state, now=now + timedelta(seconds=2)
+    )
+    cleared = observer.observe(
+        "demo", "run-1", source(), git_state(), stable.state, now=now + timedelta(seconds=3)
+    )
 
     assert [event.event_type for event in first.events] == ["ci.available"]
-    assert [event.event_type for event in entered.events] == ["ci.status.changed", "ci.check.failed"]
+    assert [event.event_type for event in entered.events] == [
+        "ci.status.changed",
+        "ci.check.failed",
+    ]
     assert len(entered.incident_candidates) == 1
     assert stable.events == () and stable.incident_candidates == ()
-    assert [event.event_type for event in cleared.events] == ["ci.status.changed", "ci.check.recovered"]
+    assert [event.event_type for event in cleared.events] == [
+        "ci.status.changed",
+        "ci.check.recovered",
+    ]
 
 
 def test_head_change_and_no_checks_transitions() -> None:
@@ -157,8 +171,12 @@ def test_rate_limit_backoff_skips_provider_until_reset() -> None:
     provider = Provider([error, snapshot()])
     observer = GitHubCISourceObserver(provider)
     first = observer.observe("demo", "run-1", source(), git_state(), None, now=now)
-    skipped = observer.observe("demo", "run-1", source(), git_state(), first.state, now=now + timedelta(seconds=30))
-    recovered = observer.observe("demo", "run-1", source(), git_state(), skipped.state, now=now + timedelta(seconds=121))
+    skipped = observer.observe(
+        "demo", "run-1", source(), git_state(), first.state, now=now + timedelta(seconds=30)
+    )
+    recovered = observer.observe(
+        "demo", "run-1", source(), git_state(), skipped.state, now=now + timedelta(seconds=121)
+    )
     assert [event.event_type for event in first.events] == ["ci.rate_limited"]
     assert skipped.events == ()
     assert provider.calls == 2

@@ -93,12 +93,8 @@ def test_same_source_id_is_isolated_by_project(tmp_path: Path) -> None:
     _database, _, _, _, runner = build_runner(tmp_path)
     source = ProcessSourceConfig(source_id="worker", pid_file_ref="local://worker.pid")
 
-    runner.observe_once(
-        ProjectConfig(project_id="one", display_name="One", sources=(source,))
-    )
-    runner.observe_once(
-        ProjectConfig(project_id="two", display_name="Two", sources=(source,))
-    )
+    runner.observe_once(ProjectConfig(project_id="one", display_name="One", sources=(source,)))
+    runner.observe_once(ProjectConfig(project_id="two", display_name="Two", sources=(source,)))
 
     assert runner.source_states.get("one", "worker") is not None
     assert runner.source_states.get("two", "worker") is not None

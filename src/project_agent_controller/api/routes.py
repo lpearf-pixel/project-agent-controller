@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,7 +21,7 @@ class ControlRequest(BaseModel):
 
 
 def runtime_from(request: Request) -> "Runtime":
-    return request.app.state.runtime
+    return cast("Runtime", request.app.state.runtime)
 
 
 @router.get("/health")
@@ -43,8 +43,7 @@ def list_projects(request: Request) -> list[dict[str, object]]:
             "display_name": project.display_name,
             "technologies": list(project.technologies),
             "sources": [
-                {"source_id": source.source_id, "kind": source.kind}
-                for source in project.sources
+                {"source_id": source.source_id, "kind": source.kind} for source in project.sources
             ],
         }
         for project in runtime.registry.list()

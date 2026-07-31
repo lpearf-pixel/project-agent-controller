@@ -189,8 +189,7 @@ class FileSourceReader:
     def _classify_severity(line: str) -> Severity:
         normalized = line.upper()
         if any(
-            marker in normalized
-            for marker in ("ERROR", "FAILED", "FATAL", "PANIC", "EXCEPTION")
+            marker in normalized for marker in ("ERROR", "FAILED", "FATAL", "PANIC", "EXCEPTION")
         ):
             return Severity.ERROR
         if "WARN" in normalized:

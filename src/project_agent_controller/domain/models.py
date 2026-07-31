@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from enum import StrEnum
-import re
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     AnyHttpUrl,
@@ -74,9 +74,7 @@ class DockerSelector(BaseModel):
     @model_validator(mode="after")
     def validate_mode(self) -> DockerSelector:
         by_name = self.container_name is not None
-        by_compose = (
-            self.compose_project is not None and self.compose_service is not None
-        )
+        by_compose = self.compose_project is not None and self.compose_service is not None
         partial_compose = (self.compose_project is None) != (self.compose_service is None)
         if partial_compose or by_name == by_compose:
             raise ValueError("docker selector must use exactly one selector mode")
@@ -123,7 +121,7 @@ class GitHubCISourceConfig(BaseModel):
     max_failed_checks: int = Field(default=20, ge=1, le=50)
 
 
-SourceConfig: TypeAlias = Annotated[
+type SourceConfig = Annotated[
     FileSourceConfig
     | ProcessSourceConfig
     | DockerSourceConfig
@@ -143,9 +141,7 @@ class ProjectConfig(BaseModel):
     @model_validator(mode="after")
     def validate_ci_dependencies(self) -> ProjectConfig:
         git_ids = {
-            source.source_id
-            for source in self.sources
-            if isinstance(source, GitSourceConfig)
+            source.source_id for source in self.sources if isinstance(source, GitSourceConfig)
         }
         for source in self.sources:
             if isinstance(source, GitHubCISourceConfig) and source.git_source_id not in git_ids:

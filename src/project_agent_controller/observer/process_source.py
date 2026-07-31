@@ -38,13 +38,9 @@ class ProcessSourceObserver:
         try:
             pid = self._read_pid(source)
         except FileNotFoundError:
-            return self._unavailable(
-                project_id, run_id, source, previous, now, "missing", None
-            )
+            return self._unavailable(project_id, run_id, source, previous, now, "missing", None)
         except ValueError:
-            return self._unavailable(
-                project_id, run_id, source, previous, now, "invalid_pid", None
-            )
+            return self._unavailable(project_id, run_id, source, previous, now, "invalid_pid", None)
 
         try:
             snapshot = self.provider.snapshot(pid)
@@ -193,7 +189,10 @@ class ProcessSourceObserver:
             recovered.append("cpu")
         if previous_rss_high and not rss_high:
             recovered.append("rss")
-        metrics = {"cpu_percent": cpu_percent, "rss_bytes": snapshot.rss_bytes}
+        metrics: dict[str, object] = {
+            "cpu_percent": cpu_percent,
+            "rss_bytes": snapshot.rss_bytes,
+        }
         if crossed:
             add(
                 "process.resource.threshold",
@@ -215,9 +214,7 @@ class ProcessSourceObserver:
         if not events and heartbeat_due:
             add("process.heartbeat", Severity.INFO, metrics)
         heartbeat_at = (
-            now.isoformat()
-            if events
-            else prior.get("last_heartbeat_at") or now.isoformat()
+            now.isoformat() if events else prior.get("last_heartbeat_at") or now.isoformat()
         )
         state = SourceState(
             project_id=project_id,
@@ -256,9 +253,7 @@ class ProcessSourceObserver:
         return max(0.0, (snapshot.cpu_seconds - prior_cpu) / elapsed * 100.0)
 
     @staticmethod
-    def _high(
-        threshold: float | int | None, value: float | int, previously_high: bool
-    ) -> bool:
+    def _high(threshold: float | int | None, value: float | int, previously_high: bool) -> bool:
         if threshold is None:
             return False
         limit = float(threshold) * (0.9 if previously_high else 1.0)

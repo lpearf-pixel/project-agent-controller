@@ -104,9 +104,7 @@ class ObserverRunner:
         with self._lock:
             state = self.control.get_state()
             if state is not ControllerState.ACTIVE:
-                raise ObservationBlocked(
-                    f"observation blocked by controller state {state.value}"
-                )
+                raise ObservationBlocked(f"observation blocked by controller state {state.value}")
             emitted = 0
             sources = sorted(project.sources, key=lambda item: _SOURCE_ORDER[item.kind])
             for source in sources:
@@ -126,9 +124,7 @@ class ObserverRunner:
 
     def _observe_file(self, project: ProjectConfig, source: FileSourceConfig) -> int:
         cursor = self.database.get_cursor(project.project_id, source.source_id)
-        batch = self.reader.read_available(
-            project.project_id, self.run_id, source, cursor
-        )
+        batch = self.reader.read_available(project.project_id, self.run_id, source, cursor)
         incident_candidates: list[tuple[str, EventRecord]] = []
         if self.incident_service is not None:
             for event in batch.events:
