@@ -1,0 +1,89 @@
+name: v0.1D Host Service Release Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - agent/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v01d-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu-docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Verify frozen observer release
+        env:
+          PAC_PREFLIGHT_GITHUB: "1"
+          PAC_GITHUB_TOKEN: ${{ github.token }}
+          PAC_V01C_PUBLIC_REPOSITORY: ${{ github.repository }}
+          PAC_V01C_PUBLIC_SHA: ${{ github.sha }}
+        run: ./scripts/verify-v0.1c.sh
+      - name: Start disposable Docker fixture
+        run: >-
+          docker run -d --name pac-v01d-preflight
+          --label com.docker.compose.project=pac-v01d
+          --label com.docker.compose.service=fixture
+          alpine:3.22 sh -c 'echo preflight-ready; sleep 300'
+      - name: Verify Docker GET-only observer
+        env:
+          PAC_DOCKER_SOCKET: /var/run/docker.sock
+          PAC_DOCKER_COMPOSE_PROJECT: pac-v01d
+          PAC_DOCKER_COMPOSE_SERVICE: fixture
+        run: uv run python scripts/preflight-docker-v0.1d.py
+      - name: Remove disposable Docker fixture
+        if: always()
+        run: docker rm -f pac-v01d-preflight || true
+
+  macos-launchd:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Verify frozen observer release
+        env:
+          PAC_PREFLIGHT_GITHUB: "1"
+          PAC_GITHUB_TOKEN: ${{ github.token }}
+          PAC_V01C_PUBLIC_REPOSITORY: ${{ github.repository }}
+          PAC_V01C_PUBLIC_SHA: ${{ github.sha }}
+        run: ./scripts/verify-v0.1c.sh
+      - name: Verify LaunchAgent rendering
+        run: |
+          service_root="$(mktemp -d)"
+          env_file="$service_root/pac.env"
+          output_dir="$service_root/output"
+          log_dir="$service_root/logs"
+          mkdir -p "$output_dir" "$log_dir"
+          printf 'PAC_HOST=127.0.0.1\nPAC_PORT=9090\n' > "$env_file"
+          chmod 600 "$env_file"
+          uv run pac service render \
+            --platform launchd \
+            --env-file "$env_file" \
+            --executable "$PWD/.venv/bin/pac" \
+            --working-directory "$PWD" \
+            --log-directory "$log_dir" \
+            --output-dir "$output_dir"
+          plutil -lint "$output_dir/com.openai.project-agent-controller.plist"

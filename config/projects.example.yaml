@@ -1,0 +1,11 @@
+config_version: 1
+projects:
+  - project_id: example-project
+    display_name: Example Project
+    technologies: [python]
+    sources:
+      - source_id: application-log
+        kind: file
+        path_ref: local://example/application.log
+        encoding: utf-8
+        parser: text-v1

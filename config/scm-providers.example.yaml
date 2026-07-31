@@ -1,0 +1,16 @@
+config_version: 1
+providers:
+  - provider_id: github-cloud
+    kind: github
+    api_base_url: https://api.github.com
+    api_version: '2022-11-28'
+    credential_ref: env://PAC_GITHUB_TOKEN
+    timeout_seconds: 10
+
+  # Private GitHub Enterprise Server example:
+  # - provider_id: github-private
+  #   kind: github
+  #   api_base_url: https://git.example.internal/api/v3
+  #   api_version: '2022-11-28'
+  #   credential_ref: env://PAC_PRIVATE_GITHUB_TOKEN
+  #   timeout_seconds: 10
