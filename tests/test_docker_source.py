@@ -39,8 +39,14 @@ def container(container_id="abc"):
 
 
 def snapshot(
-    *, container_id="abc", state="running", health="healthy", restarts=0,
-    exit_code=0, oom=False, memory=100,
+    *,
+    container_id="abc",
+    state="running",
+    health="healthy",
+    restarts=0,
+    exit_code=0,
+    oom=False,
+    memory=100,
 ):
     return DockerSnapshot(
         container_id=container_id,
@@ -83,9 +89,7 @@ def test_missing_is_coalesced_then_available() -> None:
 def test_ambiguous_selector_is_coalesced() -> None:
     error = DockerSelectorAmbiguous("docker selector matched 2 containers")
     provider = FakeDockerProvider([error, error])
-    observer = DockerSourceObserver(
-        provider, clock=lambda: datetime(2026, 7, 22, tzinfo=UTC)
-    )
+    observer = DockerSourceObserver(provider, clock=lambda: datetime(2026, 7, 22, tzinfo=UTC))
 
     first = observer.observe("demo", "run-1", source(), None)
     second = observer.observe("demo", "run-1", source(), first.state)
@@ -178,9 +182,7 @@ def test_error_log_is_bounded_and_becomes_incident_candidate() -> None:
         ),
     )
     provider = FakeDockerProvider([container()], [snapshot()], [batch])
-    observer = DockerSourceObserver(
-        provider, clock=lambda: datetime(2026, 7, 22, tzinfo=UTC)
-    )
+    observer = DockerSourceObserver(provider, clock=lambda: datetime(2026, 7, 22, tzinfo=UTC))
 
     result = observer.observe("demo", "run-1", source(include_logs=True), None)
 

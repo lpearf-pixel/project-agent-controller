@@ -159,10 +159,7 @@ class DockerSourceObserver:
             return event
 
         previously_available = prior.get("presence") == "available"
-        same_container = (
-            previously_available
-            and prior.get("container_id") == snapshot.container_id
-        )
+        same_container = previously_available and prior.get("container_id") == snapshot.container_id
         if not previously_available:
             add(
                 "docker.container.available",
@@ -173,10 +170,7 @@ class DockerSourceObserver:
                     "image": snapshot.image,
                 },
             )
-        elif (
-            not same_container
-            or int(prior.get("restart_count", 0)) < snapshot.restart_count
-        ):
+        elif not same_container or int(prior.get("restart_count", 0)) < snapshot.restart_count:
             add(
                 "docker.container.restarted",
                 Severity.WARNING,
@@ -292,9 +286,7 @@ class DockerSourceObserver:
                 },
             )
         heartbeat_at = (
-            now.isoformat()
-            if events
-            else prior.get("last_heartbeat_at") or now.isoformat()
+            now.isoformat() if events else prior.get("last_heartbeat_at") or now.isoformat()
         )
         state = SourceState(
             project_id=project_id,
@@ -332,10 +324,7 @@ class DockerSourceObserver:
         prior: dict[str, object],
         container_id: str,
     ) -> DockerLogCursor:
-        if (
-            prior.get("presence") != "available"
-            or prior.get("container_id") != container_id
-        ):
+        if prior.get("presence") != "available" or prior.get("container_id") != container_id:
             return DockerLogCursor()
         raw = prior.get("log_cursor")
         if not isinstance(raw, dict):

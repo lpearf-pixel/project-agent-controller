@@ -72,9 +72,7 @@ def frame(stream: int, payload: bytes) -> bytes:
 def test_compose_selector_matches_exactly_one_container() -> None:
     provider = DockerEngineProvider(FakeTransport(containers=[container()]))
 
-    result = provider.find_container(
-        DockerSelector(compose_project="demo", compose_service="db")
-    )
+    result = provider.find_container(DockerSelector(compose_project="demo", compose_service="db"))
 
     assert result is not None
     assert result.container_id == "abc"
@@ -87,9 +85,7 @@ def test_ambiguous_selector_fails_closed() -> None:
     )
 
     with pytest.raises(DockerSelectorAmbiguous, match="matched 2 containers"):
-        provider.find_container(
-            DockerSelector(compose_project="demo", compose_service="db")
-        )
+        provider.find_container(DockerSelector(compose_project="demo", compose_service="db"))
 
 
 def test_inspect_returns_only_normalized_safe_fields() -> None:
@@ -114,8 +110,7 @@ def test_inspect_returns_only_normalized_safe_fields() -> None:
 def test_timestamped_multiplex_logs_are_parsed_and_deduplicated() -> None:
     payload = frame(
         1,
-        b"2026-07-22T00:00:01.000000000Z first\n"
-        b"2026-07-22T00:00:02.000000000Z second\n",
+        b"2026-07-22T00:00:01.000000000Z first\n2026-07-22T00:00:02.000000000Z second\n",
     )
     provider = DockerEngineProvider(FakeTransport(logs=payload))
 
@@ -129,10 +124,7 @@ def test_timestamped_multiplex_logs_are_parsed_and_deduplicated() -> None:
 
 
 def test_plain_tty_logs_and_line_limit() -> None:
-    payload = (
-        b"2026-07-22T00:00:01Z one\n"
-        b"2026-07-22T00:00:02Z two\n"
-    )
+    payload = b"2026-07-22T00:00:01Z one\n2026-07-22T00:00:02Z two\n"
     provider = DockerEngineProvider(FakeTransport(logs=payload))
 
     result = provider.logs("abc", DockerLogCursor(), limit=1, tail=100)

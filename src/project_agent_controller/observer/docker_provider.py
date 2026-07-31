@@ -83,8 +83,10 @@ class DockerEngineProvider:
         for item in raw:
             if not isinstance(item, dict):
                 continue
-            labels = item.get("Labels") if isinstance(item.get("Labels"), dict) else {}
-            names = item.get("Names") if isinstance(item.get("Names"), list) else []
+            labels_value: object = item.get("Labels")
+            labels = labels_value if isinstance(labels_value, dict) else {}
+            names_value: object = item.get("Names")
+            names = names_value if isinstance(names_value, list) else []
             clean_names = [str(name).removeprefix("/") for name in names]
             by_name = selector.container_name is not None and selector.container_name in clean_names
             by_compose = (
@@ -109,14 +111,15 @@ class DockerEngineProvider:
         raw = self.transport.get_json(f"/containers/{container_id}/json")
         if not isinstance(raw, dict):
             raise DockerTransportError("Docker inspect response must be an object")
-        state = raw.get("State") if isinstance(raw.get("State"), dict) else {}
-        health_raw = state.get("Health") if isinstance(state.get("Health"), dict) else None
-        config = raw.get("Config") if isinstance(raw.get("Config"), dict) else {}
+        state_value: object = raw.get("State")
+        state = state_value if isinstance(state_value, dict) else {}
+        health_value: object = state.get("Health")
+        health_raw = health_value if isinstance(health_value, dict) else None
+        config_value: object = raw.get("Config")
+        config = config_value if isinstance(config_value, dict) else {}
         memory_bytes: int | None = None
         try:
-            stats = self.transport.get_json(
-                f"/containers/{container_id}/stats", {"stream": "0"}
-            )
+            stats = self.transport.get_json(f"/containers/{container_id}/stats", {"stream": "0"})
             if isinstance(stats, dict):
                 memory = stats.get("memory_stats")
                 if isinstance(memory, dict) and isinstance(memory.get("usage"), int):
@@ -165,9 +168,7 @@ class DockerEngineProvider:
         lines: list[DockerLogLine] = []
         for stream, raw_line in parsed:
             timestamp, line = self._split_timestamp(raw_line)
-            digest = sha256(
-                f"{stream}\0{timestamp}\0{line}".encode("utf-8")
-            ).hexdigest()
+            digest = sha256(f"{stream}\0{timestamp}\0{line}".encode()).hexdigest()
             if last_timestamp is not None and timestamp < last_timestamp:
                 continue
             if timestamp == last_timestamp and digest in recent_hashes:

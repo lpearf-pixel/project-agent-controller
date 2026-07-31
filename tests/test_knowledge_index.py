@@ -200,10 +200,7 @@ def test_markdown_prompt_uses_frontmatter_and_body_hash(settings) -> None:
     path = root / "prompts/markdown.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        "---\n"
-        + yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False)
-        + "---\n"
-        + body,
+        "---\n" + yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False) + "---\n" + body,
         encoding="utf-8",
     )
     database = Database(settings.database_path)

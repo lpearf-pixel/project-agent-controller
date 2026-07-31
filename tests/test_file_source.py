@@ -38,7 +38,7 @@ def test_reader_reads_only_new_complete_lines(tmp_path: Path) -> None:
 
     assert [event.payload["line"] for event in first.events] == ["first"]
     assert [event.payload["line"] for event in second.events] == ["second"]
-    assert second.cursor.byte_offset == len("first\nsecond\n".encode())
+    assert second.cursor.byte_offset == len(b"first\nsecond\n")
 
 
 def test_reader_holds_partial_line_until_newline(tmp_path: Path) -> None:

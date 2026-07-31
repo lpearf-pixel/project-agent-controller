@@ -99,10 +99,12 @@ def test_resource_threshold_crossing_and_recovery(tmp_path: Path) -> None:
         rss_warning_bytes=1000,
     )
     current = [datetime(2026, 7, 22, tzinfo=UTC)]
-    provider = FakeProcessProvider([
-        snapshot(cpu=7.0, rss=2000),
-        snapshot(cpu=7.1, rss=500),
-    ])
+    provider = FakeProcessProvider(
+        [
+            snapshot(cpu=7.0, rss=2000),
+            snapshot(cpu=7.1, rss=500),
+        ]
+    )
     observer = ProcessSourceObserver(tmp_path, provider, clock=lambda: current[0])
     previous = SourceState(
         project_id="demo",
@@ -136,10 +138,12 @@ def test_access_denied_is_coalesced_and_command_line_is_not_exposed(tmp_path: Pa
     pid_file.parent.mkdir(parents=True)
     pid_file.write_text("42\n", encoding="utf-8")
     source = ProcessSourceConfig(source_id="worker", pid_file_ref="local://demo/worker.pid")
-    provider = FakeProcessProvider([
-        ProcessUnavailable(ProcessUnavailableKind.ACCESS_DENIED, 42),
-        ProcessUnavailable(ProcessUnavailableKind.ACCESS_DENIED, 42),
-    ])
+    provider = FakeProcessProvider(
+        [
+            ProcessUnavailable(ProcessUnavailableKind.ACCESS_DENIED, 42),
+            ProcessUnavailable(ProcessUnavailableKind.ACCESS_DENIED, 42),
+        ]
+    )
     observer = ProcessSourceObserver(
         tmp_path, provider, clock=lambda: datetime(2026, 7, 22, tzinfo=UTC)
     )
