@@ -1,0 +1,8 @@
+{
+  "id": "baby-monitor-inspect-001",
+  "repo": "/Users/kandysmith/dev/baby-monitor-local",
+  "base": "codex/visual-regression-corpus",
+  "objective": "Summarize the current empty-room visual alarm behavior and identify one safe next check.",
+  "context": ["AGENTS.md", "README.md"],
+  "tests": [["git", "status", "--porcelain"]]
+}

@@ -1,0 +1,16 @@
+name: Dual agent isolated checks
+on:
+  push:
+    branches: [codex/i9-m2-agent-mesh]
+  pull_request:
+jobs:
+  dual-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m compileall -q dual_agent.py tests/dual_agent
+      - run: python -m unittest discover -s tests/dual_agent -v
+      - run: bash -n scripts/setup-m2-agent.sh scripts/setup-i9-agent.sh scripts/connect-m2-agent.sh
