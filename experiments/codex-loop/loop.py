@@ -10,9 +10,8 @@ import shutil
 import signal
 import subprocess
 import sys
-import time
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 RUNTIME = Path(os.environ.get('PAC_CODEX_LOOP_DATA', str(Path.home() / '.local/share/pac-codex-loop'))).expanduser()
 BLOCKED = ('.env', '.codex/', '.github/workflows/', '.git/', 'AGENTS.md')
@@ -28,6 +27,10 @@ def call(argv, cwd=None, timeout=20, env=None, stdin=None, logfile=None):
         os.killpg(p.pid, signal.SIGKILL)
         output, _ = p.communicate()
         raise RuntimeError(f'timeout after {timeout}s: {argv[0]}')
+    except KeyboardInterrupt:
+        os.killpg(p.pid, signal.SIGKILL)
+        p.communicate()
+        raise
     if logfile:
         logfile.parent.mkdir(parents=True, exist_ok=True)
         logfile.write_text(output[:2_000_000], encoding='utf-8')
@@ -54,9 +57,16 @@ def changed(repo):
     return sorted(set(tracked + others))
 
 
-def disallowed(paths):
-    return [p for p in paths if any(p == s or p.startswith(s) for s in BLOCKED) or
-            '/.env' in p or p.endswith(('.pem', '.key', '.p12'))]
+def disallowed(paths, repo=None):
+    bad = []
+    for p in paths:
+        parts = PurePosixPath(p).parts
+        if (any(p == s or p.startswith(s) for s in BLOCKED) or
+            any(s == 'AGENTS.md' or s == '.codex' or s.startswith('.env') for s in parts) or
+            p.endswith(('.pem', '.key', '.p12', '.pyc', '.sqlite', '.db')) or
+            (repo is not None and (repo / p).is_symlink())):
+            bad.append(p)
+    return bad
 
 
 def doctor():
@@ -136,7 +146,7 @@ def run(args):
                     raise RuntimeError(f'Codex exited {status}, see {evidence}')
                 state['status'] = 'VALIDATING'
                 save(state_path, state)
-                bad = disallowed(changed(work))
+                bad = disallowed(changed(work), work)
                 if bad:
                     state['status'] = 'BLOCKED'
                     state['reason'] = 'protected paths changed: ' + ', '.join(bad)
@@ -151,7 +161,7 @@ def run(args):
                                           logfile=run_dir / f'test-{attempt}-{i}.log')
                     if result:
                         last_failure += f'CHECK {i} {test!r} exited {result}:\n{output[-2500:]}\n'
-                post_check_bad = disallowed(changed(work))
+                post_check_bad = disallowed(changed(work), work)
                 if post_check_bad:
                     state.update(status='BLOCKED', reason='protected paths changed by validator: ' + ', '.join(post_check_bad))
                     save(state_path, state)
