@@ -6,8 +6,8 @@ This experimental sidecar is not connected to PAC's existing read-only observer 
 
 ```bash
 mkdir -p ~/projects && cd ~/projects
-git clone -b feat/codex-loop-v0-20261015 https://github.com/lpearf-pixel/project-agent-controller.git
-cd project-agent-controller
+git clone -b feat/codex-loop-v0-20261015 https://github.com/lpearf-pixel/project-agent-controller.git project-agent-controller-codex-pilot
+cd project-agent-controller-codex-pilot
 bash experiments/codex-loop/bootstrap.sh
 ```
 
@@ -23,7 +23,7 @@ git config user.email 'pilot@example.invalid'
 printf 'start\n' > README.md
 git add README.md && git commit -m init
 printf 'Write a Python file hello.py that prints hello.\n' > task.md
-cd ~/projects/project-agent-controller
+cd ~/projects/project-agent-controller-codex-pilot
 python3 experiments/codex-loop/loop.py run --repo ~/projects/orch-sandbox --task ~/projects/orch-sandbox/task.md --check 'python3 hello.py'
 ```
 
