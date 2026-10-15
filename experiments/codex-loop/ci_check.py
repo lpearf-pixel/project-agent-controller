@@ -23,9 +23,10 @@ FAILED = {"failure", "error", "cancelled", "timed_out", "action_required", "stal
 NEUTRAL = {"neutral", "skipped"}
 
 
-def api_json(endpoint, timeout=40, caller=call):
+def api_json(endpoint, timeout=40, caller=None):
     """Obtain a verified API JSON document without confusing CLI errors with JSON."""
-    code, output = caller(["gh", "api", endpoint], timeout=timeout)
+    command = caller if caller is not None else call
+    code, output = command(["gh", "api", endpoint], timeout=timeout)
     if code:
         raise RuntimeError(
             "GitHub REST request failed (gh api, exit "
@@ -119,8 +120,9 @@ def _read_state(task_id, repository):
     return path, state, url, sha
 
 
-def _pr_metadata(url, repository, timeout=35, caller=call):
-    code, output = caller(
+def _pr_metadata(url, repository, timeout=35, caller=None):
+    command = caller if caller is not None else call
+    code, output = command(
         ["gh", "pr", "view", url, "--repo", repository,
          "--json", "isDraft,headRefName,headRefOid,baseRefName"], timeout=timeout,
     )
