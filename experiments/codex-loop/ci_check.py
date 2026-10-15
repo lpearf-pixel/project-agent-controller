@@ -135,17 +135,10 @@ def check(task_id, repository):
         overall = "FAIL"
     elif "PENDING" in (check_state, status_state):
         overall = "PENDING"
-    elif (check_state in ("PASS", "UNKNOWN")
-          and status_state in ("PASS", "ABSENT")
-          and "PASS" in (check_state, status_state)):
-        overall = "PASS" if check_state == "PASS" else "UNKNOWN"
-    elif check_state == "PASS" and status_state == "ABSENT":
+    elif check_state == "PASS" and status_state in ("PASS", "ABSENT"):
+        # This pilot requires at least one completed successful check run.
         overall = "PASS"
     else:
-        overall = "UNKNOWN"
-    # If statuses have a result but no check runs, those can be valid,
-    # but this pilot specifically requires an actual passing Actions check run.
-    if check_state != "PASS" and overall == "PASS":
         overall = "UNKNOWN"
     print(json.dumps({
         "task_id": task_id,
