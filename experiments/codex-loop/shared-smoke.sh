@@ -25,12 +25,15 @@ printf 'Initial project\n' > "$sandbox/README.md"
 git -C "$sandbox" add README.md
 git -C "$sandbox" commit -m "init"
 printf 'Create hello.py that prints hello when executed. Do not modify any other files.\n' > "$sandbox/task.md"
+echo "[codex-loop] Authentication ready. Starting bounded real Codex smoke (max 180s per attempt)."
 python3 "$source_root/experiments/codex-loop/loop.py" run \
   --repo "$sandbox" \
   --task "$sandbox/task.md" \
   --worktree-root "$code_root" \
   --check "python3 hello.py" \
-  --repairs 2
+  --codex-timeout 180 \
+  --check-timeout 30 \
+  --repairs 1
 echo "Shared worktrees: $code_root"
 echo "Task state: $HOME/.local/share/pac-codex-loop/runs"
 echo "No GitHub push was attempted."
