@@ -30,12 +30,17 @@ jobs:
             experiments/codex-loop/verify-smoke.py \
             experiments/codex-loop/publish.py \
             experiments/codex-loop/ci_check.py
-      - name: Validate Bash entrypoints
+      - name: Validate Bash entrypoints and E2E dry-run
         run: |
-          bash -n experiments/codex-loop/bootstrap.sh \
+          for script in \
+            experiments/codex-loop/bootstrap.sh \
             experiments/codex-loop/shared-smoke.sh \
             experiments/codex-loop/repair-ubuntu24-sandbox.sh \
             experiments/codex-loop/e2e-smoke.sh
+          do
+            bash -n "$script"
+          done
+          bash experiments/codex-loop/e2e-smoke.sh
       - name: Run isolated fake-Codex test suite
         run: |
           python3 -m unittest discover -s experiments/codex-loop/tests -v
