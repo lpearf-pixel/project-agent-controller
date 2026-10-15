@@ -96,6 +96,29 @@ Before real projects, verify the Parallels mount supports `git worktree add`, ex
 
 The original checkout is not modified; a separate `auto/codex-*` worktree is created. The default is **no push**. The former combined `loop.py run --publish` mode has been retired. Never auto-merge or deploy. The publisher remains under the **same Ubuntu account**, so there is no separate-user credential isolation. Do not use unattended on Baby Monitor.
 
+## Phase 2 real GitHub E2E: dedicated private fixture
+
+The Ubuntu user needs `gh` installed, `gh auth status -h github.com` authenticated as `lpearf-pixel`, and Git HTTPS credentials set up via `gh auth setup-git`. Do **not** point the previous `orch-sandbox` at the PAC controller remote: that disposable repository was created only for local smoke testing.
+
+A single opt-in pilot script is provided in the existing macOS/Ubuntu shared checkout. First run it without flags to preview effects:
+
+```bash
+cd /media/psf/chatgpt/project-agent-controller-codex-pilot
+bash experiments/codex-loop/e2e-smoke.sh
+```
+
+If the displayed repository and paths are correct, explicitly invoke:
+
+```bash
+bash experiments/codex-loop/e2e-smoke.sh --execute
+```
+
+**Remote effects of `--execute`:** creates a new **private** GitHub repository `lpearf-pixel/pac-codex-loop-e2e-20261015` with only synthetic test files and a minimal PR CI workflow; pushes its initial `main`; calls real Codex to generate `hello.py` in `/media/psf/chatgpt/codex-worktrees/<task_id>/`; performs strict local output validation; commits and pushes only `auto/codex-<task_id>`; opens a **Draft** pull request; checks its GitHub Actions status. It never merges, updates PAC main, touches the baby-monitor repository or deploys anything. Its saved task state and logs remain Ubuntu-local.
+
+The E2E command refuses to overwrite an existing fixture repository or local directory. If it fails partway through, inspect the output and saved task state. **Do not delete the partially created private repository to rerun without investigating.** The separate publisher supports resume after push/PR failures for a task already marked `LOCAL_PASS` or `PUSHED`; see the commands below.
+
+GitHub confirmed in May 2025 that Draft PRs are available in private repositories on GitHub Free. This script has only been exercised by offline mocks/CI so far; the first full GitHub E2E run must take place in the authorized Ubuntu host environment.
+
 ## Phase 2: optional GitHub publishing (explicit, offline-tested only)
 
 **Prerequisites:** `gh auth status -h github.com` succeeds under the Ubuntu user; the local source repository has a valid `origin` pointing to exactly the explicitly named GitHub repository; the task was created by the **new** runner after its validation snapshot feature was added. Older task `e475dce86248` was created before the snapshot was recorded and its disposable source repository has no GitHub remote; **it cannot be safely published**. Do not attach the controller's own remote to a disposable repository.
