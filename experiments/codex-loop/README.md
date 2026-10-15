@@ -26,6 +26,16 @@ The **only** expected shared root is `/media/psf/chatgpt/`:
 
 Task state, logs and the process lock stay on Ubuntu-native `~/.local/share/pac-codex-loop` to avoid relying on the Parallels shared filesystem for POSIX flock semantics. The `--worktree-root` flag can override the generated code location.
 
+## Recommended: one-command shared-folder smoke test
+
+Run from the existing checkout after `git pull --ff-only`:
+
+```bash
+bash experiments/codex-loop/shared-smoke.sh
+```
+
+This creates a uniquely named disposable `orch-sandbox-XXXXXXXX` Git repository inside `/media/psf/chatgpt/`, invokes real Codex once against it, and saves generated code under `/media/psf/chatgpt/codex-worktrees/<task_id>/`. It does not publish. Source code and generated code are visible on both operating systems; the task state and controller lock intentionally remain on Ubuntu ext4. **The shared mount's actual Git semantics must pass the smoke test before wider use.**
+
 ## Minimal dry run — shared source AND generated code
 
 ```bash
