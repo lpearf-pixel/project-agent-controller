@@ -124,7 +124,7 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(run.returncode, 1, run.stdout+run.stderr)
         state = json.loads(run.stdout)
         self.assertEqual(state['status'], 'BLOCKED')
-        self.assertIn('sandbox', state['reason'].lower())
+        self.assertIn('file_change', state['reason'].lower())
         logs = list((self.root / 'data' / 'runs' / state['task_id']).glob('codex-*.jsonl'))
         self.assertEqual(
             len(logs), 1, 'infrastructure failure should never trigger repair attempts'
