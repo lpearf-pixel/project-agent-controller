@@ -117,7 +117,7 @@ bash experiments/codex-loop/e2e-smoke.sh --execute
 
 The E2E command refuses to overwrite an existing fixture repository or local directory. If it fails partway through, inspect the output and saved task state. **Do not delete the partially created private repository to rerun without investigating.** The separate publisher supports resume after push/PR failures for a task already marked `LOCAL_PASS` or `PUSHED`; see the commands below.
 
-GitHub confirmed in May 2025 that Draft PRs are available in private repositories on GitHub Free. This script has only been exercised by offline mocks/CI so far; the first full GitHub E2E run must take place in the authorized Ubuntu host environment.
+**2026-10-15 E2E acceptance:** The authorized Parallels Ubuntu host created the private fixture, Codex generated and locally validated `hello.py`, the separate publisher pushed `auto/codex-695f2899dd58` and opened [Draft PR #1](https://github.com/lpearf-pixel/pac-codex-loop-e2e-20261015/pull/1). The GitHub Actions check `verify` completed successfully on head SHA `2fac98ebe0d9f778a82696a2f6218397fa89f9d7`. After a compatibility fix for Ubuntu's older `gh`, the operator independently ran `--resume-ci 695f2899dd58` and confirmed `ci_status: PASS` with a completed successful check run and no commit-status contexts. PR #1 remained draft and unmerged. The first E2E attempt had failed only during CI-result parsing; no repeat generation or push was necessary.
 
 ## Recover PR CI observation without rerunning Codex
 
@@ -171,7 +171,19 @@ python3 experiments/codex-loop/ci_check.py \
   --repository OWNER/REPOSITORY
 ```
 
-This checks the exact Draft PR and commit. **No checks, pending checks, failures, or a mismatched PR cannot return CI PASS.** It never modifies the branch or merges. CI-failure automatic repair, live remote publisher E2E validation, auto-scheduling and per-user credential isolation are **not yet implemented**. This phase is for trusted pilot repositories, not production.
+This checks the exact Draft PR and commit. **No checks, pending checks, failures, or a mismatched PR can return CI PASS.** It never modifies the branch or merges. **Live GitHub publisher E2E acceptance is now confirmed on the private fixture**, but CI-failure automatic repair, auto-scheduling, per-user credential isolation, and controlled production use are **not yet implemented**. This phase remains restricted to trusted pilot repositories.
+
+## Phase 3 delivery plan — deterministic control, bounded repair
+
+The next milestone is an **opt-in controller state machine**, not a multi-agent framework:
+
+1. Poll the **exact Draft PR head commit** with a bounded total wall-clock budget and bounded GitHub API calls. Treat `PENDING` / `UNKNOWN` / missing data as non-success and **never overwrite old PR state based on a newer unverified commit**.
+2. Normalize CI outcomes into `CI_PASS`, `CI_FAIL`, `CI_PENDING`, `CI_UNKNOWN`, `CI_TIMEOUT`; persist last seen SHA, normalized results, and retry budget via atomic state writes. Every transition must be idempotent and supported by an offline regression test.
+3. For `CI_FAIL` only, gather a minimal redacted summary from a *known* failing CI job; prohibit arbitrary untrusted text from becoming a shell command or broad permission grant. A later, separately approved experiment may feed that summary into a **single** scoped Codex repair. No automatic CI-repair loop until the report-only gate has passed remote E2E.
+4. On `CI_PASS`, **stop at Draft PR** with a clear report; no auto-merge, production deployment, camera/device actions, or unattended access to baby-care data.
+5. Pilot first against a disposable fixture; demonstrate at least one failing CI and one successful CI with exact SHA matching. Preserve branch and log evidence; do not create another GitHub test repository just to rerun the already passing case.
+
+The orchestration should remain **deterministic code for state, safety, retries, and Git operations**. Codex is used only for scoped code generation/repair. A manager agent is not necessary here and would increase failure modes and token cost.
 
 See [audit](../../docs/architecture/codex-loop-m3-pilot-audit-20261015.md).
-Note: a test that creates bytecode caches or other generated artifacts must first configure the repository's `.gitignore`; the pilot fails closed on `.pyc`, secrets, and symlink changes. `--publish` is not recommended until the separate-publisher security gate is complete.
+Note: a test that creates bytecode caches or other generated artifacts must first configure the repository's `.gitignore`; the pilot fails closed on `.pyc`, secrets, and symlink changes. The separate publisher has passed this isolated real-GitHub E2E test; it remains **explicit opt-in for trusted test repositories only**, with no separate-user secret isolation.
