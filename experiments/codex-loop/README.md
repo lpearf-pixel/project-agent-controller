@@ -173,6 +173,48 @@ python3 experiments/codex-loop/ci_check.py \
 
 This checks the exact Draft PR and commit. **No checks, pending checks, failures, or a mismatched PR can return CI PASS.** It never modifies the branch or merges. **Live GitHub publisher E2E acceptance is now confirmed on the private fixture**, but CI-failure automatic repair, auto-scheduling, per-user credential isolation, and controlled production use are **not yet implemented**. This phase remains restricted to trusted pilot repositories.
 
+## M3 blocked-task recovery: false sandbox alarm when reading historical source
+
+An M3 task `679d670188eb` was marked `BLOCKED` before validation. This can happen
+when the controller scans the **entire** Codex event JSON for phrases such as
+`sandbox failed`; the controller's README and its source contain those exact
+historical phrases, so even **successful reads** can falsely trigger the old
+classifier. The revised classifier only recognizes **typed errors and failed
+commands** as sandbox evidence. Genuine `file_change failed` events still
+block the task, and the original evidence is preserved.
+
+After updating the shared controller checkout, **first dry-run the recovery**
+of the existing task. Do not rerun Codex, reinstall AppArmor packages, remove
+the existing worktree or run the fixture E2E test.
+
+```bash
+cd /media/psf/chatgpt/project-agent-controller-codex-pilot
+git pull --ff-only origin feat/codex-loop-v0-20261015
+python3 experiments/codex-loop/recover_blocked.py --task-id 679d670188eb
+```
+
+If the result shows `DRY_RUN` with expected changed files and checks, you may
+explicitly re-run only the saved validators against the **existing** worktree:
+
+```bash
+python3 experiments/codex-loop/recover_blocked.py --task-id 679d670188eb --execute
+```
+
+The recovery checks the original Codex JSONL and returns an error if it
+contains a typed failure, if Codex made no changes, if protected paths changed,
+if the Git worktree or HEAD drifted, or if the saved validator fails or modifies
+artifacts. Only when **all checks pass** is the status changed to `LOCAL_PASS`
+with an artifact fingerprint; recovery does not commit, push, merge or call Codex.
+If it refuses recovery, inspect the task without cleanup:
+
+```bash
+python3 experiments/codex-loop/diagnose.py 679d670188eb
+```
+
+Do not publish a recovery without reviewing the generated diff and the trust
+boundary: the validator still executes as the Ubuntu user and is not an
+independently isolated security sandbox.
+
 ## Phase 3 delivery plan — deterministic control, bounded repair
 
 The next milestone is an **opt-in controller state machine**, not a multi-agent framework:
