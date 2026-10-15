@@ -57,6 +57,7 @@ class CICheckTests(unittest.TestCase):
         self.assertEqual(self.do_check([]), 1)
         self.assertEqual(self.do_check([{"name": "a", "bucket": "pending"}]), 1)
         self.assertEqual(self.do_check([{"name": "a", "bucket": "fail"}]), 1)
+        self.assertEqual(self.do_check([{"name": "a", "bucket": "skipping"}]), 1)
 
     def test_pr_must_match_draft(self):
         with self.assertRaisesRegex(RuntimeError, "no longer matches"):
