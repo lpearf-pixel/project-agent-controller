@@ -13,20 +13,23 @@ import sys
 import uuid
 from pathlib import Path, PurePosixPath
 
-RUNTIME = Path(os.environ.get('PAC_CODEX_LOOP_DATA', str(Path.home() / '.local/share/pac-codex-loop'))).expanduser()
+RUNTIME = Path(
+    os.environ.get('PAC_CODEX_LOOP_DATA', str(Path.home() / '.local/share/pac-codex-loop'))
+).expanduser()
 BLOCKED = ('.env', '.codex/', '.github/workflows/', '.git/', 'AGENTS.md')
 
 
 def call(argv, cwd=None, timeout=20, env=None, stdin=None, logfile=None):
-    p = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+    p = subprocess.Popen(
+        argv, cwd=cwd, stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env,
                          start_new_session=True)
     try:
         output, _ = p.communicate(input=stdin, timeout=timeout)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         os.killpg(p.pid, signal.SIGKILL)
         output, _ = p.communicate()
-        raise RuntimeError(f'timeout after {timeout}s: {argv[0]}')
+        raise RuntimeError(f'timeout after {timeout}s: {argv[0]}') from exc
     except KeyboardInterrupt:
         os.killpg(p.pid, signal.SIGKILL)
         p.communicate()
@@ -76,7 +79,9 @@ def codex_auth_ready():
         code, output = call(['codex', 'login', 'status'], timeout=15)
     except RuntimeError as ex:
         return False, str(ex)
-    return code == 0 and 'logged in' in output.lower() and 'not logged in' not in output.lower(), output.strip()[:160]
+    ready = (code == 0 and 'logged in' in output.lower()
+             and 'not logged in' not in output.lower())
+    return ready, output.strip()[:160]
 
 
 def doctor():
@@ -121,7 +126,8 @@ def codex_result(logfile):
             if isinstance(item, dict):
                 if item.get('type') == 'file_change' and item.get('status') == 'failed':
                     failures.append('Codex file_change failed')
-                if item.get('type') == 'command_execution' and item.get('exit_code') not in (None, 0):
+                if (item.get('type') == 'command_execution'
+                        and item.get('exit_code') not in (None, 0)):
                     command_output = str(item.get('aggregated_output', ''))
                     if any(marker in command_output.lower() for marker in
                            ('bwrap:', 'rtm_newaddr', 'network namespace',
@@ -133,7 +139,8 @@ def codex_result(logfile):
                     'sandbox failed', 'permission denied to create new namespace')):
                 sandbox_failure = True
     if sandbox_failure:
-        return False, 'Linux sandbox/namespace initialization failed; repair bubblewrap/AppArmor and rerun a new task'
+        return False, ('Linux sandbox/namespace initialization failed; '
+                       'repair bubblewrap/AppArmor and rerun a new task')
     if failures:
         return False, '; '.join(dict.fromkeys(failures))[:400]
     if not seen_completed:
@@ -180,8 +187,8 @@ def run(args):
     with (RUNTIME / 'controller.lock').open('w') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise RuntimeError('another Codex task is already running')
+        except BlockingIOError as exc:
+            raise RuntimeError('another Codex task is already running') from exc
         task_id = uuid.uuid4().hex[:12]
         branch = 'auto/codex-' + task_id
         run_dir = RUNTIME / 'runs' / task_id
@@ -196,13 +203,22 @@ def run(args):
         try:
             # Create fresh branch without editing the user's current branch.
             git(repo, 'worktree', 'add', '-b', branch, str(work), base_sha, timeout=45)
+            last_failure = ''
             for attempt in range(args.repairs + 1):
-                state.update(status='RUNNING_CODEX' if attempt == 0 else 'REPAIRING', repairs=max(0, attempt))
+                state.update(
+                    status='RUNNING_CODEX' if attempt == 0 else 'REPAIRING',
+                    repairs=max(0, attempt),
+                )
                 save(state_path, state)
                 evidence = run_dir / f'codex-{attempt}.jsonl'
                 print(f'[codex-loop] Codex attempt {attempt + 1}/{args.repairs + 1} started; '
-                      f'timeout={args.codex_timeout}s; worktree={work}', file=sys.stderr, flush=True)
-                prompt = task if attempt == 0 else (task + '\n\nValidator failed. Repair only the failing change.\n' + last_failure[-6000:])
+                      f'timeout={args.codex_timeout}s; worktree={work}',
+                      file=sys.stderr, flush=True)
+                prompt = (
+                    task if attempt == 0 else
+                    task + '\n\nValidator failed. Repair only the failing change.\n'
+                    + last_failure[-6000:]
+                )
                 status, _ = call(['codex', '--ask-for-approval', 'never', 'exec', '--json',
                                   '--sandbox', 'workspace-write', '--cd', str(work), '-'],
                                  cwd=work, stdin=prompt, timeout=args.codex_timeout,
@@ -226,7 +242,8 @@ def run(args):
                 last_failure = ''
                 for i, test in enumerate(tests):
                     # Minimal environment for test. Same Unix user: NOT full isolation.
-                    test_env = {k: v for k, v in os.environ.items() if k in ('PATH', 'LANG', 'LC_ALL', 'TZ')}
+                    keep_vars = ('PATH', 'LANG', 'LC_ALL', 'TZ')
+                    test_env = {k: v for k, v in os.environ.items() if k in keep_vars}
                     test_env['HOME'] = str(run_dir)
                     result, output = call(test, cwd=work, env=test_env, timeout=args.check_timeout,
                                           logfile=run_dir / f'test-{attempt}-{i}.log')
@@ -234,7 +251,10 @@ def run(args):
                         last_failure += f'CHECK {i} {test!r} exited {result}:\n{output[-2500:]}\n'
                 post_check_bad = disallowed(changed(work), work)
                 if post_check_bad:
-                    state.update(status='BLOCKED', reason='protected paths changed by validator: ' + ', '.join(post_check_bad))
+                    state.update(
+                        status='BLOCKED',
+                        reason='protected paths changed by validator: ' + ', '.join(post_check_bad),
+                    )
                     save(state_path, state)
                     break
                 if not last_failure:
@@ -277,7 +297,8 @@ def publish(repo, work, state, state_path, run_dir, task):
     git(work, 'push', '--set-upstream', 'origin', 'HEAD:refs/heads/' + state['branch'], timeout=90)
     # Do not auto-merge. gh is called only after the local validation succeeds.
     body_path = run_dir / 'pr-body.md'
-    body_path.write_text('Draft: automatically generated and locally validated. HUMAN REVIEW REQUIRED.\n\n' +
+    body_path.write_text(
+        'Draft: automatically generated and locally validated. HUMAN REVIEW REQUIRED.\n\n' +
                          task[:2000] + '\n\nBase: ' + state['base_sha'] + '\n', encoding='utf-8')
     code, out = call(['gh', 'pr', 'create', '--draft', '--base', state['base_branch'],
                       '--head', state['branch'], '--title', 'Codex task ' + state['task_id'],
@@ -297,12 +318,14 @@ def main():
     r = sub.add_parser('run')
     r.add_argument('--repo', type=Path, required=True)
     r.add_argument('--task', type=Path, required=True)
-    r.add_argument('--worktree-root', type=Path, help='location for generated code; defaults to repo sibling codex-worktrees')
+    r.add_argument('--worktree-root', type=Path,
+                   help='location for generated code; defaults to repo sibling codex-worktrees')
     r.add_argument('--check', action='append', required=True)
     r.add_argument('--repairs', type=int, default=2)
     r.add_argument('--codex-timeout', type=int, default=1200)
     r.add_argument('--check-timeout', type=int, default=300)
-    r.add_argument('--publish', action='store_true', help='explicit opt-in: push new branch and draft PR')
+    r.add_argument('--publish', action='store_true',
+                   help='explicit opt-in: push new branch and draft PR')
     args = p.parse_args()
     try:
         return doctor() if args.command == 'doctor' else run(args)
