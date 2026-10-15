@@ -227,5 +227,34 @@ The next milestone is an **opt-in controller state machine**, not a multi-agent 
 
 The orchestration should remain **deterministic code for state, safety, retries, and Git operations**. Codex is used only for scoped code generation/repair. A manager agent is not necessary here and would increase failure modes and token cost.
 
+## Phase 3: bounded read-only CI monitoring
+
+Phase 3 adds an opt-in monitor; it does not repair code, push, merge, deploy, or
+read Baby Monitor/Baby Care runtime data. It reads the Draft PR and checks only
+for the immutable `publish_commit` recorded in the task's Ubuntu-local state.
+
+```bash
+python3 experiments/codex-loop/ci_check.py monitor \
+  --task-id YOUR_NEW_TASK_ID \
+  --repository OWNER/REPOSITORY \
+  --max-attempts 12 --max-api-calls 36 --timeout-seconds 300
+```
+
+The defaults permit at most 12 observations, 36 GitHub API calls (PR metadata,
+check-runs and commit statuses), and five minutes of wall-clock time. The
+monitor normalizes results to `PASS`, `FAIL`, `PENDING`, `UNKNOWN`, or
+`TIMEOUT`; pending checks that exhaust the polling budget become `TIMEOUT`.
+API/response errors, missing checks, and an unexpected PR head SHA are
+`UNKNOWN`, and a SHA mismatch stops further check queries immediately. No
+result from a newer, unverified commit can replace the recorded head result.
+
+Every GitHub query is counted and reserved in the Ubuntu-local task state **before** the request. A controller lock prevents concurrent monitor/publisher updates from overwriting each other. Total attempt, request and elapsed-time budgets are preserved when a nonterminal monitor process restarts. Once a terminal result has been recorded, the monitor returns the saved snapshot without re-querying GitHub; it reports a point-in-time verdict, not a perpetual guarantee that the PR is unchanged.
+
+Each observation and the terminal result are written atomically to
+`~/.local/share/pac-codex-loop/runs/<task-id>/state.json` (override with
+`PAC_CODEX_LOOP_DATA`). Re-running after a terminal result returns the saved
+observation without another GitHub call. The original `ci_check.py` invocation
+without a subcommand, or with `check`, remains the one-shot Phase 2 gate.
+
 See [audit](../../docs/architecture/codex-loop-m3-pilot-audit-20261015.md).
 Note: a test that creates bytecode caches or other generated artifacts must first configure the repository's `.gitignore`; the pilot fails closed on `.pyc`, secrets, and symlink changes. The separate publisher has passed this isolated real-GitHub E2E test; it remains **explicit opt-in for trusted test repositories only**, with no separate-user secret isolation.
