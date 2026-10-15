@@ -26,6 +26,27 @@ The **only** expected shared root is `/media/psf/chatgpt/`:
 
 Task state, logs and the process lock stay on Ubuntu-native `~/.local/share/pac-codex-loop` to avoid relying on the Parallels shared filesystem for POSIX flock semantics. The `--worktree-root` flag can override the generated code location.
 
+## Ubuntu 24.04 Linux sandbox fails before writing files
+
+A reproduced Parallels VM task `8f1d67f6278f` reported `network-namespace error` and repeated `file_change failed`, despite `codex login status` being healthy and the shared Git worktree being created. This is a **sandbox infrastructure** issue, not a Python coding problem. Per OpenAI's official Linux sandbox prerequisite docs, use the distribution `bubblewrap` package and a scoped `bwrap-userns-restrict` AppArmor profile.
+
+After reviewing what the helper does, run the Ubuntu-24.04-only repair script **once**. It uses sudo for apt and to load a bwrap-specific AppArmor profile, without disabling global AppArmor user namespace restrictions or starting Codex as root.
+
+```bash
+cd /media/psf/chatgpt/project-agent-controller-codex-pilot
+bash experiments/codex-loop/repair-ubuntu24-sandbox.sh
+```
+
+On success, retry only the disposable shared-folder smoke:
+
+```bash
+bash experiments/codex-loop/shared-smoke.sh
+```
+
+If the standalone Codex sandbox test still fails after installing the profile, **stop**. Preserve the failure output for review rather than adding `--dangerously-bypass-approvals-and-sandbox`, `danger-full-access`, `sysctl kernel.apparmor_restrict_unprivileged_userns=0`, a setuid bwrap binary, or a root Codex process. More isolation options can be evaluated separately. The controller now detects Codex JSONL file-change/sandbox failures and blocks the task immediately instead of consuming repair attempts.
+
+Reference: https://developers.openai.com/codex/concepts/sandboxing
+
 ## Recommended: one-command shared-folder smoke test
 
 Run from the existing checkout after `git pull --ff-only`:
