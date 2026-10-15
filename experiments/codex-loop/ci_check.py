@@ -52,8 +52,9 @@ def check(task_id, repository):
     elif any(str(r.get("bucket", "")).lower() in ("fail", "cancel")
              for r in rows):
         status = "FAIL"
-    elif all(str(r.get("bucket", "")).lower() in ("pass", "skipping")
-             for r in rows):
+    elif (any(str(r.get("bucket", "")).lower() == "pass" for r in rows)
+          and all(str(r.get("bucket", "")).lower() in ("pass", "skipping")
+                  for r in rows)):
         status = "PASS"
     else:
         status = "PENDING"
