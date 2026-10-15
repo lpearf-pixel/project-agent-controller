@@ -27,7 +27,9 @@ jobs:
         run: |
           python3 -m py_compile experiments/codex-loop/loop.py \
             experiments/codex-loop/diagnose.py \
-            experiments/codex-loop/verify-smoke.py
+            experiments/codex-loop/verify-smoke.py \
+            experiments/codex-loop/publish.py \
+            experiments/codex-loop/ci_check.py
       - name: Run isolated fake-Codex test suite
         run: |
           python3 -m unittest discover -s experiments/codex-loop/tests -v
