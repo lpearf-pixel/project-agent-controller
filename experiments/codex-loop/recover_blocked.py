@@ -83,7 +83,7 @@ def recheck(task_id, execute=False, timeout=180):
             print(json.dumps({
                 "mode": "DRY_RUN",
                 "task_id": task_id,
-                "classification": "historical text triggered a false sandbox BLOCKED",
+                "classification": "no typed Codex failure found; revalidation is eligible",
                 "worktree": str(work),
                 "changed_files": names,
                 "validation_commands": saved_checks,
