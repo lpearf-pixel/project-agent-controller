@@ -2,6 +2,7 @@
 """Opt-in single-task Codex loop. Trusted repositories only; not a security sandbox."""
 import argparse
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -70,6 +71,37 @@ def disallowed(paths, repo=None):
             (repo is not None and (repo / p).is_symlink())):
             bad.append(p)
     return bad
+
+
+def artifact_snapshot(work):
+    """Fingerprint unchanged files that passed local validation."""
+    names = changed(work)
+    digest = hashlib.sha256()
+    for name in names:
+        parts = PurePosixPath(name).parts
+        if not parts or any(p in ('', '.', '..') for p in parts):
+            raise RuntimeError('unsafe path in Git changes')
+        path = work / name
+        if path.is_symlink():
+            raise RuntimeError('symlink in Git change path')
+        for parent in path.parents:
+            if parent == work:
+                break
+            if parent.is_symlink():
+                raise RuntimeError('symlinked parent of Git change')
+        if path.is_dir():
+            raise RuntimeError('unexpected directory in changed files')
+        digest.update(name.encode('utf-8') + b'\\0')
+        if path.is_file():
+            digest.update(b'file\\0')
+            with path.open('rb') as fh:
+                while block := fh.read(1024 * 1024):
+                    digest.update(block)
+        elif not path.exists():
+            digest.update(b'deleted\\0')
+        else:
+            raise RuntimeError('unsupported changed-file type')
+    return digest.hexdigest(), names
 
 
 def codex_auth_ready():
@@ -154,8 +186,11 @@ def run(args):
     if not (repo / '.git').exists():
         # normal .git directory or linked worktree git file, both allowed
         raise RuntimeError('repo must be a Git checkout')
-    if args.publish and not shutil.which('gh'):
-        raise RuntimeError('gh is required for --publish')
+    if args.publish:
+        raise RuntimeError(
+            '--publish is not supported during code generation; '
+            'use publish.py --task-id ID --repository owner/repo after LOCAL_PASS'
+        )
     auth_ok, auth_message = codex_auth_ready()
     if not auth_ok:
         raise RuntimeError('Codex login required before running: ' + auth_message +
@@ -262,9 +297,11 @@ def run(args):
                         state.update(status='BLOCKED', validation='BLOCKED',
                                      reason='Codex made no changes')
                     else:
+                        digest, files = artifact_snapshot(work)
                         state.update(status='LOCAL_PASS', validation='PASS',
                                      validated_on_attempt=attempt + 1,
-                                     changed_files=changed(work))
+                                     changed_files=files,
+                                     artifact_sha256=digest)
                         # Earlier validator failures are historical, not the final result.
                         state.pop('last_failure', None)
                         state.pop('reason', None)
@@ -279,35 +316,11 @@ def run(args):
                 state.update(status='FAILED', validation='FAIL',
                              reason='repair budget exhausted')
                 save(state_path, state)
-            if state['status'] == 'LOCAL_PASS' and args.publish:
-                publish(repo, work, state, state_path, run_dir, task)
         except Exception as ex:
             state.update(status='FAILED', reason=str(ex)[:2000])
             save(state_path, state)
         print(json.dumps(state, indent=2, ensure_ascii=False))
         return 0 if state['status'] in ('LOCAL_PASS', 'PR_DRAFT') else 1
-
-
-def publish(repo, work, state, state_path, run_dir, task):
-    # Publishing is explicit opt-in and uses only the new auto/codex-... branch.
-    state['status'] = 'PUBLISHING'
-    save(state_path, state)
-    git(work, 'add', '-A')
-    git(work, 'commit', '-m', 'chore: automatic Codex task ' + state['task_id'])
-    git(work, 'push', '--set-upstream', 'origin', 'HEAD:refs/heads/' + state['branch'], timeout=90)
-    # Do not auto-merge. gh is called only after the local validation succeeds.
-    body_path = run_dir / 'pr-body.md'
-    body_path.write_text(
-        'Draft: automatically generated and locally validated. HUMAN REVIEW REQUIRED.\n\n' +
-                         task[:2000] + '\n\nBase: ' + state['base_sha'] + '\n', encoding='utf-8')
-    code, out = call(['gh', 'pr', 'create', '--draft', '--base', state['base_branch'],
-                      '--head', state['branch'], '--title', 'Codex task ' + state['task_id'],
-                      '--body-file', str(body_path)], cwd=work, timeout=90)
-    if code:
-        raise RuntimeError('push succeeded but PR creation failed: ' + out[:500])
-    state['status'] = 'PR_DRAFT'
-    state['pr_url'] = out.strip()
-    save(state_path, state)
 
 
 def main():
