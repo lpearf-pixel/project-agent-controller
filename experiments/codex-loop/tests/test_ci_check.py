@@ -202,7 +202,7 @@ class CICheckTests(unittest.TestCase):
         with lockfile.open("w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             with patch.object(ci_check, "RUNTIME", self.data):
-                with self.assertRaisesRegex(RuntimeError, "already running"):
+                with self.assertRaisesRegex(RuntimeError, "task is running"):
                     ci_check.monitor(self.task_id, self.repository, poll_interval=0)
 
     def test_monitor_resume_never_resets_request_budget(self):
