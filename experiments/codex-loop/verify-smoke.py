@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Trusted disposable-repo validator: hello.py must print exactly 'hello'."""
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 def main():
     hello = Path.cwd() / "hello.py"
