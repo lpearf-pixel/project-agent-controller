@@ -6,46 +6,18 @@ It shares a Unix identity with validators; it is not a credential sandbox.
 """
 import argparse
 import fcntl
-import hashlib
 import json
 import os
 import re
 import shlex
 import shutil
 import sys
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
-from loop import RUNTIME, call, changed, disallowed, git, save
+from loop import RUNTIME, artifact_snapshot, call, changed, disallowed, git, save
 
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 ID = re.compile(r"[a-f0-9]{12}")
-
-
-def snapshot(work):
-    """Hash the exact uncommitted tracked/untracked file state, including deletions."""
-    names = changed(work)
-    h = hashlib.sha256()
-    for name in names:
-        parts = PurePosixPath(name).parts
-        if not parts or any(p in ("", ".", "..") for p in parts):
-            raise RuntimeError("unsafe path in Git changes")
-        path = work / name
-        if path.is_symlink() or any(parent.is_symlink() for parent in path.parents
-                                    if parent != work and work in parent.parents):
-            raise RuntimeError("symlink in Git change path")
-        if path.is_dir():
-            raise RuntimeError("unexpected directory in changed files")
-        h.update(name.encode("utf-8") + b"\0")
-        if path.is_file():
-            h.update(b"file\0")
-            with path.open("rb") as fh:
-                while block := fh.read(1024 * 1024):
-                    h.update(block)
-        elif not path.exists():
-            h.update(b"deleted\0")
-        else:
-            raise RuntimeError("unsupported changed-file type")
-    return h.hexdigest(), names
 
 
 def github_origin(repo, expected):
@@ -86,7 +58,7 @@ def check_validators(work, run_dir, state, digest):
             raise RuntimeError(f"saved check {i} failed: {output[-500:]}")
     if disallowed(changed(work), work):
         raise RuntimeError("protected file modified during publish validation")
-    new_digest, _ = snapshot(work)
+    new_digest, _ = artifact_snapshot(work)
     if new_digest != digest:
         raise RuntimeError("validator modified artifacts; refuse publish")
 
@@ -159,6 +131,8 @@ def run(args):
             raise RuntimeError("another controller task is running") from exc
         try:
             if state["status"] == "LOCAL_PASS":
+                if artifact_snapshot(work)[0] != state["artifact_sha256"]:
+                    raise RuntimeError("worktree changed while acquiring publish lock")
                 git(work, "add", "-A")
                 git(work, "commit", "-m", "chore: automatic Codex task " + args.task_id)
                 state.update(status="COMMITTED", publish_commit=git(work, "rev-parse", "HEAD"))
