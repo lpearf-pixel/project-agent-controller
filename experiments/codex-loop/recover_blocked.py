@@ -14,9 +14,7 @@ import shlex
 import sys
 from pathlib import Path
 
-from loop import (
-    RUNTIME, artifact_snapshot, call, changed, codex_result, disallowed, git, save,
-)
+from loop import RUNTIME, artifact_snapshot, call, changed, codex_result, disallowed, git, save
 
 ID = re.compile(r"[0-9a-f]{12}")
 FORBIDDEN_CHECKS = {"sh", "bash", "sudo", "curl", "wget", "docker"}
