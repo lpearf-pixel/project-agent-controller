@@ -13,6 +13,16 @@ test -w "$shared_root" || { echo "ERROR: shared root not writable: $shared_root"
 command -v git >/dev/null || { echo "ERROR: git not installed" >&2; exit 2; }
 command -v codex >/dev/null || { echo "ERROR: Codex CLI not installed" >&2; exit 2; }
 python3 "$source_root/experiments/codex-loop/loop.py" doctor
+# The standalone sandbox probe runs no model calls and avoids burning a Codex task
+# when Ubuntu AppArmor/bubblewrap cannot create required namespaces.
+if codex sandbox linux --help >/dev/null 2>&1; then
+  echo "[codex-loop] Preflighting Linux sandbox on the Parallels shared mount..."
+  if ! (cd "$shared_root" && codex sandbox linux -- /usr/bin/true); then
+    echo "ERROR: Linux sandbox failed before any Codex model call." >&2
+    echo "Run: bash experiments/codex-loop/repair-ubuntu24-sandbox.sh" >&2
+    exit 2
+  fi
+fi
 code_root="$shared_root/codex-worktrees"
 mkdir -p "$code_root"
 sandbox="$(mktemp -d "$shared_root/orch-sandbox-XXXXXXXX")"
