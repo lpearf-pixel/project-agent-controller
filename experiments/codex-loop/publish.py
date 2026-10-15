@@ -22,7 +22,10 @@ ID = re.compile(r"[a-f0-9]{12}")
 
 def github_origin(repo, expected):
     url = git(repo, "remote", "get-url", "origin").strip()
-    pattern = r"(?:https://github\.com/|git@github\.com:)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?"
+    pattern = (
+        r"(?:https://github\.com/|git@github\.com:)"
+        r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?"
+    )
     match = re.fullmatch(pattern, url)
     if not match or match.group(1).lower() != expected.lower():
         raise RuntimeError("origin must be exactly the explicitly selected github.com repository")
