@@ -11,7 +11,7 @@ import json
 import re
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from loop import RUNTIME, call, save
 
@@ -279,7 +279,7 @@ def _monitor_locked(task_id, repository, *, max_attempts,
             "attempt": attempt + 1,
             "outcome": outcome,
             "api_calls": api_calls,
-            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "observed_at": datetime.now(UTC).isoformat(),
             **detail,
         }
         observations.append(record)
