@@ -40,7 +40,7 @@ python3 "$source_root/experiments/codex-loop/loop.py" run \
   --repo "$sandbox" \
   --task "$sandbox/task.md" \
   --worktree-root "$code_root" \
-  --check "python3 hello.py" \
+  --check "python3 $source_root/experiments/codex-loop/verify-smoke.py" \
   --codex-timeout 180 \
   --check-timeout 30 \
   --repairs 1
