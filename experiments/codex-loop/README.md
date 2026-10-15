@@ -119,6 +119,30 @@ The E2E command refuses to overwrite an existing fixture repository or local dir
 
 GitHub confirmed in May 2025 that Draft PRs are available in private repositories on GitHub Free. This script has only been exercised by offline mocks/CI so far; the first full GitHub E2E run must take place in the authorized Ubuntu host environment.
 
+## Recover PR CI observation without rerunning Codex
+
+If the E2E run reached `PR_DRAFT` but `[6/6]` repeatedly printed
+`PR checks JSON could not be parsed`, the Ubuntu 24.04 distribution `gh`
+can be too old for `gh pr checks --json`. GitHub Actions may already have
+succeeded. The CI gate now uses compatible `gh api` calls to the exact head
+SHA's check-runs and commit-status endpoints; the E2E runner stops immediately
+on configuration/API errors, rather than repeating them 12 times.
+
+For the already-created private fixture and task, **do not run `--execute` again**:
+that mode intentionally refuses to overwrite an existing test repository.
+After updating the controller checkout, run only:
+
+```bash
+cd /media/psf/chatgpt/project-agent-controller-codex-pilot
+git pull --ff-only origin feat/codex-loop-v0-20261015
+bash experiments/codex-loop/e2e-smoke.sh --resume-ci 695f2899dd58
+```
+
+The `--resume-ci` mode reads the existing Draft PR and GitHub CI only; it
+does not call Codex, modify files, push, open a new PR, or merge. `CI PASS`
+still requires an actual successful check run on the exact recorded commit,
+with no failed or pending runs or commit-status contexts.
+
 ## Phase 2: optional GitHub publishing (explicit, offline-tested only)
 
 **Prerequisites:** `gh auth status -h github.com` succeeds under the Ubuntu user; the local source repository has a valid `origin` pointing to exactly the explicitly named GitHub repository; the task was created by the **new** runner after its validation snapshot feature was added. Older task `e475dce86248` was created before the snapshot was recorded and its disposable source repository has no GitHub remote; **it cannot be safely published**. Do not attach the controller's own remote to a disposable repository.
