@@ -1,8 +1,11 @@
 """CI gate tests, including older Ubuntu gh without 'pr checks --json'."""
+import fcntl
+import io
 import json
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -105,6 +108,124 @@ class CICheckTests(unittest.TestCase):
     def test_pr_must_match_draft(self):
         with self.assertRaisesRegex(RuntimeError, "no longer matches"):
             self.do_check([self.job()], pr_draft=False)
+
+    def monitor_call(self, rows, *, statuses=None, head_sha=None, api_error=False,
+                     max_attempts=3, max_api_calls=9):
+        meta = {
+            "isDraft": True,
+            "headRefName": "auto/codex-" + self.task_id,
+            "headRefOid": head_sha or self.sha,
+            "baseRefName": "main",
+        }
+        calls = []
+
+        def fake_call(argv, **kwargs):
+            calls.append(argv)
+            if argv[1:3] == ["pr", "view"]:
+                return 0, json.dumps(meta)
+            if argv[1] == "api":
+                if api_error:
+                    return 1, "authentication error"
+                if "/check-runs?" in argv[2]:
+                    return 0, json.dumps({"total_count": len(rows), "check_runs": rows})
+                if "/status?" in argv[2]:
+                    return 0, json.dumps({"statuses": statuses or []})
+            raise AssertionError(argv)
+
+        output = io.StringIO()
+        with (patch.object(ci_check, "RUNTIME", self.data),
+              patch.object(ci_check, "call", fake_call),
+              redirect_stdout(output)):
+            result = ci_check.monitor(self.task_id, self.repository,
+                                      max_attempts=max_attempts,
+                                      max_api_calls=max_api_calls,
+                                      timeout_seconds=10, poll_interval=0)
+        state = json.loads((self.data / "runs" / self.task_id / "state.json").read_text())
+        return result, state, calls, json.loads(output.getvalue())
+
+    def test_monitor_success_and_idempotent_repeat(self):
+        result, state, calls, output = self.monitor_call([self.job()])
+        self.assertEqual(result, 0)
+        self.assertEqual(state["ci_status"], "PASS")
+        self.assertEqual(state["ci_head_sha"], self.sha)
+        result, repeated, calls, _ = self.monitor_call([self.job()])
+        self.assertEqual(result, 0)
+        self.assertEqual(repeated["ci_status"], "PASS")
+        self.assertEqual(len(calls), 0, "terminal observation must be idempotent")
+
+    def test_monitor_failure(self):
+        result, state, _calls, _output = self.monitor_call([self.job(conclusion="failure")])
+        self.assertEqual(result, 1)
+        self.assertEqual(state["ci_status"], "FAIL")
+
+    def test_monitor_pending_exhausts_to_timeout(self):
+        result, state, calls, _output = self.monitor_call(
+            [self.job(status="queued", conclusion=None)], max_attempts=2, max_api_calls=6)
+        self.assertEqual(result, 1)
+        self.assertEqual(state["ci_status"], "TIMEOUT")
+        self.assertEqual(state["ci_attempts"], 2)
+        self.assertEqual(len(calls), 6)
+
+    def test_monitor_api_error_is_unknown(self):
+        result, state, calls, _output = self.monitor_call([], api_error=True)
+        self.assertEqual(result, 1)
+        self.assertEqual(state["ci_status"], "UNKNOWN")
+        self.assertEqual(state["ci_observations"][0]["outcome"], "UNKNOWN")
+        self.assertEqual(len(calls), 2)  # PR metadata plus the failed API request
+
+    def test_monitor_missing_checks_is_unknown(self):
+        result, state, _calls, _output = self.monitor_call([])
+        self.assertEqual(result, 1)
+        self.assertEqual(state["ci_status"], "UNKNOWN")
+
+    def test_monitor_records_exact_api_call_counts(self):
+        result, state, calls, _output = self.monitor_call([self.job()])
+        self.assertEqual(result, 0)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(state["ci_api_calls"], 3)
+        self.assertEqual(state["ci_observations"][0]["api_calls"], 3)
+
+    def test_monitor_does_not_under_count_partial_api_failure(self):
+        result, state, calls, _output = self.monitor_call([], api_error=True)
+        self.assertEqual(result, 1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(state["ci_api_calls"], 2)
+
+    def test_sha_mismatch_uses_only_one_request(self):
+        result, state, calls, _output = self.monitor_call([self.job()], head_sha="b" * 40)
+        self.assertEqual(result, 1)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(state["ci_api_calls"], 1)
+
+    def test_monitor_rejects_concurrent_writer(self):
+        lockfile = self.data / "controller.lock"
+        with lockfile.open("w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with patch.object(ci_check, "RUNTIME", self.data):
+                with self.assertRaisesRegex(RuntimeError, "already running"):
+                    ci_check.monitor(self.task_id, self.repository, poll_interval=0)
+
+    def test_monitor_resume_never_resets_request_budget(self):
+        _, state, _calls, _output = self.monitor_call(
+            [self.job(status="queued", conclusion=None)],
+            max_attempts=2, max_api_calls=3,
+        )
+        self.assertEqual(state["ci_status"], "TIMEOUT")
+        self.assertEqual(state["ci_api_calls"], 3)
+        # Terminal reruns are read-only regardless of the caller's polling args.
+        result, repeated, calls, _output = self.monitor_call(
+            [self.job()], max_attempts=2, max_api_calls=3,
+        )
+        self.assertEqual(result, 1)
+        self.assertEqual(repeated["ci_api_calls"], 3)
+        self.assertEqual(calls, [])
+
+    def test_monitor_stops_on_sha_mismatch_without_check_api_calls(self):
+        result, state, calls, _output = self.monitor_call([self.job()], head_sha="b" * 40)
+        self.assertEqual(result, 1)
+        self.assertEqual(state["ci_status"], "UNKNOWN")
+        self.assertEqual(state["ci_reason"], "PR head SHA changed unexpectedly")
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == "__main__":
