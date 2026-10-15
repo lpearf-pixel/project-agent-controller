@@ -47,6 +47,17 @@ If the standalone Codex sandbox test still fails after installing the profile, *
 
 Reference: https://developers.openai.com/codex/concepts/sandboxing
 
+## Check the existing task without rerunning Codex
+
+A prior run may report `LOCAL_PASS` with a stale `last_failure` from an earlier failed attempt. A passing exit code of `python3 hello.py` did not verify the printed output. Run this local, deterministic check in the shared worktree:
+
+```bash
+cd /media/psf/chatgpt/codex-worktrees/e475dce86248
+python3 /media/psf/chatgpt/project-agent-controller-codex-pilot/experiments/codex-loop/verify-smoke.py
+```
+
+If it prints `PASS`, the specific smoke requirement is satisfied without spending more model tokens. If it prints `FAIL`, inspect the generated file and rerun the disposable smoke with the stronger validator. The original sandbox source branch remains unchanged.
+
 ## Recommended: one-command shared-folder smoke test
 
 Run from the existing checkout after `git pull --ff-only`:
@@ -75,7 +86,7 @@ python3 experiments/codex-loop/loop.py run \
   --repo "$ROOT/orch-sandbox" \
   --task "$ROOT/orch-sandbox/task.md" \
   --worktree-root "$ROOT/codex-worktrees" \
-  --check 'python3 hello.py' \
+  --check "python3 $ROOT/project-agent-controller-codex-pilot/experiments/codex-loop/verify-smoke.py" \
   --repairs 2
 ```
 
