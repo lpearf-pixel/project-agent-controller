@@ -144,7 +144,7 @@ class CICheckTests(unittest.TestCase):
         return result, state, calls, json.loads(output.getvalue())
 
     def test_monitor_success_and_idempotent_repeat(self):
-        result, state, calls, output = self.monitor_call([self.job()])
+        result, state, calls, _output = self.monitor_call([self.job()])
         self.assertEqual(result, 0)
         self.assertEqual(state["ci_status"], "PASS")
         self.assertEqual(state["ci_head_sha"], self.sha)
@@ -201,9 +201,11 @@ class CICheckTests(unittest.TestCase):
         lockfile = self.data / "controller.lock"
         with lockfile.open("w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            with patch.object(ci_check, "RUNTIME", self.data):
-                with self.assertRaisesRegex(RuntimeError, "task is running"):
-                    ci_check.monitor(self.task_id, self.repository, poll_interval=0)
+            with (
+                patch.object(ci_check, "RUNTIME", self.data),
+                self.assertRaisesRegex(RuntimeError, "task is running"),
+            ):
+                ci_check.monitor(self.task_id, self.repository, poll_interval=0)
 
     def test_monitor_resume_never_resets_request_budget(self):
         _, state, _calls, _output = self.monitor_call(
