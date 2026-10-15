@@ -29,6 +29,9 @@ class LoopTests(unittest.TestCase):
                          '    print("Not logged in" if os.environ.get("FAKE_CODEX_NOAUTH") else "Logged in using ChatGPT")\n'
                          '    sys.exit(1 if os.environ.get("FAKE_CODEX_NOAUTH") else 0)\n'
                          'prompt=sys.stdin.read()\n'
+                         'if os.environ.get("FAKE_CODEX_REPAIR_ON_SECOND") and "Validator failed" not in prompt:\n'
+                         '    print(json.dumps({"type":"turn.completed"}))\n'
+                         '    sys.exit(0)\n'
                          'if os.environ.get("FAKE_CODEX_SANDBOX_FAIL"):\n'
                          '    print(json.dumps({"type":"item.completed","item":{"type":"file_change","status":"failed","changes":[]}}))\n'
                          '    print(json.dumps({"type":"item.completed","item":{"type":"agent_message","text":"sandbox failed with a network-namespace error"}}))\n'
@@ -107,6 +110,19 @@ class LoopTests(unittest.TestCase):
         self.assertIn('sandbox', state['reason'].lower())
         logs = list((self.root / 'data' / 'runs' / state['task_id']).glob('codex-*.jsonl'))
         self.assertEqual(len(logs), 1, 'infrastructure failure should never trigger repair attempts')
+
+    def test_successful_repair_clears_stale_failure(self):
+        self.env['FAKE_CODEX_REPAIR_ON_SECOND'] = '1'
+        run = self.run_task()
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        state = json.loads(run.stdout)
+        self.assertEqual(state['status'], 'LOCAL_PASS')
+        self.assertEqual(state['validation'], 'PASS')
+        self.assertEqual(state['validated_on_attempt'], 2)
+        self.assertEqual(state['repairs'], 1)
+        self.assertEqual(len(state['repair_history']), 1)
+        self.assertNotIn('last_failure', state)
+        self.assertIn('result.txt', state['changed_files'])
 
     def test_repair_exhaustion(self):
         run=self.run_task("python3 -c 'raise SystemExit(1)'")
