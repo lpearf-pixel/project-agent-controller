@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Summarize a failed Codex pilot run without dumping raw transcripts or credentials."""
 import argparse
-from collections import Counter
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
+from collections import Counter
+from pathlib import Path
 
-DEFAULT_ROOT = Path(os.environ.get("PAC_CODEX_LOOP_DATA", str(Path.home() / ".local/share/pac-codex-loop")))
+DEFAULT_ROOT = Path(
+    os.environ.get("PAC_CODEX_LOOP_DATA", str(Path.home() / ".local/share/pac-codex-loop"))
+)
 SENSITIVE = re.compile(
     r"(?:sk-[a-zA-Z0-9_-]{12,}|github_pat_[a-zA-Z0-9_]{12,}|ghp_[a-zA-Z0-9]{12,}|"
     r"Bearer\s+\S+|(?:token|password|secret|api_key)\s*[:=]\s*\S+)",
@@ -22,7 +24,9 @@ def clean(text, limit=450):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Inspect one Codex loop task's saved local evidence")
+    parser = argparse.ArgumentParser(
+        description="Inspect one Codex loop task's saved local evidence"
+    )
     parser.add_argument("task_id", help="12-hex task ID from the failed task JSON")
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{12}", args.task_id):
@@ -66,7 +70,9 @@ def main():
                 if not isinstance(item, dict):
                     item = {}
                 if event_type in ("error", "turn.failed", "turn.cancelled"):
-                    details = event.get("message") or event.get("error") or event.get("reason") or ""
+                    details = (
+                        event.get("message") or event.get("error") or event.get("reason") or ""
+                    )
                     failures.append(event_type + ": " + clean(details))
                 if event_type == "item.completed":
                     typ = item.get("type", "")
@@ -76,9 +82,13 @@ def main():
                         exit_code = item.get("exit_code")
                         if exit_code not in (None, 0):
                             details = item.get("aggregated_output") or item.get("status") or ""
-                            failures.append("command exit " + str(exit_code) + ": " + clean(details))
+                            failures.append(
+                                "command exit " + str(exit_code) + ": " + clean(details)
+                            )
                     elif typ == "file_change" and item.get("status") == "failed":
-                        failures.append("file_change failed: " + clean(item.get("changes", "unknown")))
+                        failures.append(
+                            "file_change failed: " + clean(item.get("changes", "unknown"))
+                        )
         print("\n" + path.name)
         print(" EVENTS:", ", ".join(f"{k}={v}" for k, v in counts.most_common(12)))
         print(" MALFORMED LINES:", malformed)
