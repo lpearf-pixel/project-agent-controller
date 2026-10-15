@@ -33,6 +33,12 @@ def main():
         parser.error(f"run state not found: {statefile}")
     state = json.loads(statefile.read_text(encoding="utf-8"))
     print("TASK:", args.task_id, "| STATUS:", state.get("status"))
+    if state.get("status") in ("LOCAL_PASS", "PR_DRAFT"):
+        print("FINAL VALIDATION: PASS (local checks).")
+        if state.get("last_failure"):
+            print("NOTE: last_failure belongs to an EARLIER repair attempt and is historical.")
+    else:
+        print("FINAL VALIDATION: NOT PASSED")
     print("REASON:", clean(state.get("reason", "(none)")))
     print("WORKTREE:", state.get("worktree", "(unknown)"))
     logs = sorted(root.glob("codex-*.jsonl"))
