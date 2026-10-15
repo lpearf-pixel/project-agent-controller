@@ -111,6 +111,12 @@ def run(args):
     if args.publish and base_branch.startswith('auto/'):
         raise RuntimeError('cannot publish PR against auto branch')
     base_sha = git(repo, 'rev-parse', 'HEAD')
+    # Keep source worktrees accessible to both macOS and the Parallels VM.
+    # Control state and the fcntl lock remain under RUNTIME on native Ubuntu storage.
+    worktree_root = (args.worktree_root or (repo.parent / 'codex-worktrees')).expanduser().resolve()
+    if worktree_root == repo or repo in worktree_root.parents:
+        raise RuntimeError('worktree root must be outside the source repository')
+    worktree_root.mkdir(parents=True, exist_ok=True)
     task = prompt_path.read_text(encoding='utf-8')
     if not (10 <= len(task) <= 40000):
         raise RuntimeError('task must be 10..40000 characters')
@@ -123,7 +129,7 @@ def run(args):
         task_id = uuid.uuid4().hex[:12]
         branch = 'auto/codex-' + task_id
         run_dir = RUNTIME / 'runs' / task_id
-        work = run_dir / 'work'
+        work = worktree_root / task_id
         run_dir.mkdir(parents=True)
         state_path = run_dir / 'state.json'
         state = {'task_id': task_id, 'status': 'PRECHECK', 'base_sha': base_sha,
@@ -216,6 +222,7 @@ def main():
     r = sub.add_parser('run')
     r.add_argument('--repo', type=Path, required=True)
     r.add_argument('--task', type=Path, required=True)
+    r.add_argument('--worktree-root', type=Path, help='location for generated code; defaults to repo sibling codex-worktrees')
     r.add_argument('--check', action='append', required=True)
     r.add_argument('--repairs', type=int, default=2)
     r.add_argument('--codex-timeout', type=int, default=1200)
