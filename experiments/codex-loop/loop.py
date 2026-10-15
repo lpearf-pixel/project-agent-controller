@@ -156,6 +156,8 @@ def run(args):
                 state.update(status='RUNNING_CODEX' if attempt == 0 else 'REPAIRING', repairs=max(0, attempt))
                 save(state_path, state)
                 evidence = run_dir / f'codex-{attempt}.jsonl'
+                print(f'[codex-loop] Codex attempt {attempt + 1}/{args.repairs + 1} started; '
+                      f'timeout={args.codex_timeout}s; worktree={work}', file=sys.stderr, flush=True)
                 prompt = task if attempt == 0 else (task + '\n\nValidator failed. Repair only the failing change.\n' + last_failure[-6000:])
                 status, _ = call(['codex', '--ask-for-approval', 'never', 'exec', '--json',
                                   '--sandbox', 'workspace-write', '--cd', str(work), '-'],
