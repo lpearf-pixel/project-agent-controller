@@ -25,7 +25,9 @@ class LoopTests(unittest.TestCase):
         self.bin.mkdir()
         codex = self.bin/'codex'
         codex.write_text('#!/usr/bin/env python3\nimport os,sys,pathlib\n'
-                         'if sys.argv[1:3] == ["login","status"]: sys.exit(0)\n'
+                         'if sys.argv[1:3] == ["login","status"]:\n'
+                         '    print("Not logged in" if os.environ.get("FAKE_CODEX_NOAUTH") else "Logged in using ChatGPT")\n'
+                         '    sys.exit(1 if os.environ.get("FAKE_CODEX_NOAUTH") else 0)\n'
                          'prompt=sys.stdin.read()\n'
                          'target=pathlib.Path(os.getcwd())\n'
                          'name=os.environ.get("FAKE_CODEX_PATH","result.txt")\n'
@@ -70,6 +72,20 @@ class LoopTests(unittest.TestCase):
             capture_output=True, text=True, env=self.env, timeout=30)
         self.assertEqual(run.returncode, 2)
         self.assertIn('outside the source repository', run.stderr)
+
+    def test_noauth_blocks_before_creating_worktree(self):
+        self.env['FAKE_CODEX_NOAUTH'] = '1'
+        run = self.run_task()
+        self.assertEqual(run.returncode, 2)
+        self.assertIn('Codex login required', run.stderr)
+        self.assertFalse((self.root / 'data' / 'runs').exists())
+
+    def test_doctor_noauth_is_error(self):
+        self.env['FAKE_CODEX_NOAUTH'] = '1'
+        run = subprocess.run([sys.executable, str(SCRIPT), 'doctor'],
+                             capture_output=True, text=True, env=self.env, timeout=20)
+        self.assertEqual(run.returncode, 2)
+        self.assertIn('NOT READY', run.stdout)
 
     def test_protected_path(self):
         self.env['FAKE_CODEX_PATH']='AGENTS.md'
