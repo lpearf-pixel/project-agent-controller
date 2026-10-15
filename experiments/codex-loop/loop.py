@@ -69,14 +69,25 @@ def disallowed(paths, repo=None):
     return bad
 
 
+def codex_auth_ready():
+    if not shutil.which('codex'):
+        return False, 'Codex CLI missing'
+    try:
+        code, output = call(['codex', 'login', 'status'], timeout=15)
+    except RuntimeError as ex:
+        return False, str(ex)
+    return code == 0 and 'logged in' in output.lower() and 'not logged in' not in output.lower(), output.strip()[:160]
+
+
 def doctor():
     print('Python:', sys.version.split()[0])
     for name in ('git', 'codex', 'gh'):
         binary = shutil.which(name)
         print(f'{name}:', binary or 'MISSING')
-    if shutil.which('codex'):
-        code, output = call(['codex', 'login', 'status'], timeout=20)
-        print('Codex login:', 'OK' if code == 0 else 'NOT READY', output[:120].replace('\n', ' '))
+    auth_ok, auth_message = codex_auth_ready()
+    print('Codex login:', 'OK' if auth_ok else 'NOT READY', auth_message.replace('\n', ' '))
+    if not auth_ok:
+        print('ACTION: run codex login --device-auth in this Ubuntu user session.')
     if shutil.which('gh'):
         code, _ = call(['gh', 'auth', 'status'], timeout=20)
         print('GitHub login:', 'OK' if code == 0 else 'NOT READY')
@@ -84,7 +95,7 @@ def doctor():
         if os.environ.get(key):
             # Do not log proxy credentials.
             print(f'{key}: configured')
-    return 0 if shutil.which('git') and shutil.which('codex') else 2
+    return 0 if shutil.which('git') and auth_ok else 2
 
 
 def run(args):
@@ -95,8 +106,10 @@ def run(args):
         raise RuntimeError('repo must be a Git checkout')
     if args.publish and not shutil.which('gh'):
         raise RuntimeError('gh is required for --publish')
-    if not shutil.which('codex'):
-        raise RuntimeError('codex is required')
+    auth_ok, auth_message = codex_auth_ready()
+    if not auth_ok:
+        raise RuntimeError('Codex login required before running: ' + auth_message +
+                           '. Run codex login --device-auth in Ubuntu.')
     if not args.check:
         raise RuntimeError('provide at least one trusted --check command')
     if not (0 <= args.repairs <= 3):
