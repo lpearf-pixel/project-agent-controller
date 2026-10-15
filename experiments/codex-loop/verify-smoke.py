@@ -4,6 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+
 def main():
     hello = Path.cwd() / "hello.py"
     if not hello.is_file():
