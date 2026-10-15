@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -45,6 +46,30 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(run.returncode,0,run.stdout+run.stderr)
         self.assertIn('LOCAL_PASS',run.stdout)
         self.assertFalse((self.repo/'result.txt').exists())
+        state = json.loads(run.stdout)
+        shared_worktree = self.root / 'codex-worktrees' / state['task_id']
+        self.assertEqual(Path(state['worktree']), shared_worktree)
+        self.assertTrue((shared_worktree / 'result.txt').exists())
+
+    def test_explicit_shared_worktree_root(self):
+        custom_root = self.root / 'shared' / 'worktrees'
+        run = subprocess.run(
+            [sys.executable, str(SCRIPT), 'run', '--repo', str(self.repo),
+             '--task', str(self.task), '--worktree-root', str(custom_root),
+             '--check', "python3 -c 'import pathlib; assert pathlib.Path(\"result.txt\").exists()'"],
+            capture_output=True, text=True, env=self.env, timeout=30)
+        self.assertEqual(run.returncode, 0, run.stdout+run.stderr)
+        state = json.loads(run.stdout)
+        self.assertEqual(Path(state['worktree']).parent, custom_root)
+
+    def test_block_nested_worktree_root(self):
+        run = subprocess.run(
+            [sys.executable, str(SCRIPT), 'run', '--repo', str(self.repo),
+             '--task', str(self.task), '--worktree-root', str(self.repo / 'nested'),
+             '--check', 'python3 -c "print(1)"'],
+            capture_output=True, text=True, env=self.env, timeout=30)
+        self.assertEqual(run.returncode, 2)
+        self.assertIn('outside the source repository', run.stderr)
 
     def test_protected_path(self):
         self.env['FAKE_CODEX_PATH']='AGENTS.md'
