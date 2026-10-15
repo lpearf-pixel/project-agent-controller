@@ -107,7 +107,7 @@ def run(args):
     github_origin(repo, args.repository)
     ensure_gh(args.repository)
     if state["status"] == "LOCAL_PASS":
-        digest, names = snapshot(work)
+        digest, names = artifact_snapshot(work)
         if not names or disallowed(names, work):
             raise RuntimeError("no safe changes eligible for publication")
         if digest != state.get("artifact_sha256"):
