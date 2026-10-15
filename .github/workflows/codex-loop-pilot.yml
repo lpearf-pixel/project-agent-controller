@@ -29,7 +29,8 @@ jobs:
             experiments/codex-loop/diagnose.py \
             experiments/codex-loop/verify-smoke.py \
             experiments/codex-loop/publish.py \
-            experiments/codex-loop/ci_check.py
+            experiments/codex-loop/ci_check.py \
+            experiments/codex-loop/recover_blocked.py
       - name: Validate Bash entrypoints and E2E dry-run
         run: |
           for script in \
