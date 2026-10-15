@@ -1,4 +1,4 @@
-"""CI gate never treats no checks, pending or failed checks as success."""
+"""CI gate tests, including older Ubuntu gh without 'pr checks --json'."""
 import json
 import sys
 import tempfile
@@ -18,6 +18,7 @@ class CICheckTests(unittest.TestCase):
         self.task_id = "123456789abc"
         self.repository = "test-owner/test-repo"
         self.url = "https://github.com/test-owner/test-repo/pull/42"
+        self.sha = "a" * 40
         root = self.data / "runs" / self.task_id
         root.mkdir(parents=True)
         state = {
@@ -25,24 +26,43 @@ class CICheckTests(unittest.TestCase):
             "pr_url": self.url,
             "branch": "auto/codex-" + self.task_id,
             "base_branch": "main",
-            "publish_commit": "a" * 40,
+            "publish_commit": self.sha,
         }
         (root / "state.json").write_text(json.dumps(state), encoding="utf-8")
 
-    def do_check(self, rows, *, pr_draft=True):
+    def job(self, status="completed", conclusion="success", sha=None):
+        return {
+            "head_sha": sha or self.sha,
+            "name": "Test generated hello.py / verify",
+            "status": status,
+            "conclusion": conclusion,
+        }
+
+    def do_check(self, rows, *, statuses=None, pr_draft=True,
+                 code_api=0, total_count=None):
         meta = {
             "isDraft": pr_draft,
             "headRefName": "auto/codex-" + self.task_id,
-            "headRefOid": "a" * 40,
+            "headRefOid": self.sha,
             "baseRefName": "main",
         }
 
         def fake_call(argv, **kwargs):
             if argv[1:3] == ["pr", "view"]:
                 return 0, json.dumps(meta)
-            if argv[1:3] == ["pr", "checks"]:
-                return 0, json.dumps(rows)
-            raise AssertionError(f"unexpected command: {argv}")
+            if argv[1] == "api":
+                if "/check-runs?" in argv[2]:
+                    if code_api:
+                        return 1, "gh api: authentication error"
+                    return 0, json.dumps({
+                        "total_count": len(rows) if total_count is None else total_count,
+                        "check_runs": rows,
+                    })
+                if "/status?" in argv[2]:
+                    return 0, json.dumps({"statuses": statuses or []})
+            raise AssertionError(
+                f"unsupported GH invocation (old CLI cannot use pr checks --json): {argv}"
+            )
 
         with (
             patch.object(ci_check, "RUNTIME", self.data),
@@ -50,18 +70,41 @@ class CICheckTests(unittest.TestCase):
         ):
             return ci_check.check(self.task_id, self.repository)
 
-    def test_full_pass(self):
-        self.assertEqual(self.do_check([{"name": "a", "bucket": "pass", "state": "SUCCESS"}]), 0)
+    def test_success_with_real_actions_check_run(self):
+        self.assertEqual(self.do_check([self.job()]), 0)
 
-    def test_unknown_and_pending_never_pass(self):
+    def test_empty_skipped_and_pending_do_not_pass(self):
         self.assertEqual(self.do_check([]), 1)
-        self.assertEqual(self.do_check([{"name": "a", "bucket": "pending"}]), 1)
-        self.assertEqual(self.do_check([{"name": "a", "bucket": "fail"}]), 1)
-        self.assertEqual(self.do_check([{"name": "a", "bucket": "skipping"}]), 1)
+        self.assertEqual(self.do_check([self.job(conclusion="skipped")]), 1)
+        self.assertEqual(self.do_check([self.job(status="queued", conclusion=None)]), 1)
+        self.assertEqual(self.do_check([self.job(status="in_progress", conclusion=None)]), 1)
+
+    def test_failed_and_cancelled_do_not_pass(self):
+        self.assertEqual(self.do_check([self.job(conclusion="failure")]), 1)
+        self.assertEqual(self.do_check([self.job(conclusion="cancelled")]), 1)
+        self.assertEqual(self.do_check([
+            self.job(), self.job(conclusion="failure")]), 1)
+
+    def test_unexpected_head_and_truncated_result_do_not_pass(self):
+        self.assertEqual(self.do_check([self.job(sha="b" * 40)]), 1)
+        self.assertEqual(self.do_check([self.job()], total_count=101), 1)
+        self.assertEqual(self.do_check([self.job()], total_count=2), 1)
+
+    def test_legacy_commit_status_checked(self):
+        self.assertEqual(self.do_check([self.job()], statuses=[
+            {"context": "external/build", "state": "success"}]), 0)
+        self.assertEqual(self.do_check([self.job()], statuses=[
+            {"context": "external/build", "state": "failure"}]), 1)
+        self.assertEqual(self.do_check([self.job()], statuses=[
+            {"context": "external/build", "state": "pending"}]), 1)
+
+    def test_api_permission_error_is_diagnostic_not_json_parse(self):
+        with self.assertRaisesRegex(RuntimeError, "gh api, exit 1"):
+            self.do_check([self.job()], code_api=1)
 
     def test_pr_must_match_draft(self):
         with self.assertRaisesRegex(RuntimeError, "no longer matches"):
-            self.do_check([{"bucket": "pass"}], pr_draft=False)
+            self.do_check([self.job()], pr_draft=False)
 
 
 if __name__ == "__main__":
