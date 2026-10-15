@@ -13,6 +13,16 @@ CI="$SOURCE_ROOT/experiments/codex-loop/ci_check.py"
 VERIFY="$SOURCE_ROOT/experiments/codex-loop/verify-smoke.py"
 RUN_OUT="$HOME/.local/share/pac-codex-loop/e2e-run-summary.json"
 
+if [[ $# -eq 2 && "$1" == "--resume-ci" ]]; then
+  case "$2" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+    *) echo "ERROR: expected a 12-character lowercase hex task ID" >&2; exit 2 ;;
+  esac
+  echo "[resume-ci] Read-only CI check for existing Draft PR; no Codex or Git writes."
+  python3 "$CI" --task-id "$2" --repository "$TARGET"
+  exit $?
+fi
+
 if [[ $# -eq 0 ]]; then
   echo "[dry-run] Separate GitHub repo: $TARGET (PRIVATE)"
   echo "[dry-run] Local source: $PROJECT_DIR"
@@ -22,7 +32,7 @@ if [[ $# -eq 0 ]]; then
   exit 0
 fi
 if [[ $# -ne 1 || "$1" != "--execute" ]]; then
-  echo "Usage: bash experiments/codex-loop/e2e-smoke.sh [--execute]" >&2
+  echo "Usage: bash experiments/codex-loop/e2e-smoke.sh [--execute|--resume-ci TASK_ID]" >&2
   exit 2
 fi
 
@@ -110,9 +120,15 @@ python3 "$PUBLISH" --task-id "$task_id" --repository "$TARGET" --execute
 echo "[6/6] Check GitHub CI (read-only, cannot treat pending as success)."
 status=1
 for step in $(seq 1 12); do
-  if python3 "$CI" --task-id "$task_id" --repository "$TARGET"; then
+  result=0
+  python3 "$CI" --task-id "$task_id" --repository "$TARGET" || result=$?
+  if [[ "$result" -eq 0 ]]; then
     status=0
     break
+  fi
+  if [[ "$result" -eq 2 ]]; then
+    echo "ERROR: CI checker encountered a configuration/API error. Stop retrying." >&2
+    exit 2
   fi
   if [[ "$step" -lt 12 ]]; then sleep 15; fi
 done
