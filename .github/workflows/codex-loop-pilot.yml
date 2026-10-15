@@ -1,0 +1,47 @@
+name: Codex Loop Pilot (offline)
+
+on:
+  pull_request:
+    paths:
+      - "experiments/codex-loop/**"
+      - ".github/workflows/codex-loop-pilot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-loop-pilot-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-tests:
+    name: Codex offline tests (no model / no secrets)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+      - name: Compile test scripts
+        run: |
+          python3 -m py_compile experiments/codex-loop/loop.py \
+            experiments/codex-loop/diagnose.py \
+            experiments/codex-loop/verify-smoke.py \
+            experiments/codex-loop/publish.py \
+            experiments/codex-loop/ci_check.py \
+            experiments/codex-loop/recover_blocked.py
+      - name: Validate Bash entrypoints and E2E dry-run
+        run: |
+          for script in \
+            experiments/codex-loop/bootstrap.sh \
+            experiments/codex-loop/shared-smoke.sh \
+            experiments/codex-loop/repair-ubuntu24-sandbox.sh \
+            experiments/codex-loop/e2e-smoke.sh
+          do
+            bash -n "$script"
+          done
+          bash experiments/codex-loop/e2e-smoke.sh
+      - name: Run isolated fake-Codex test suite
+        run: |
+          python3 -m unittest discover -s experiments/codex-loop/tests -v
