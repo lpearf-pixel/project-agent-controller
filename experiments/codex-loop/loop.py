@@ -190,7 +190,8 @@ def run(args):
         state_path = run_dir / 'state.json'
         state = {'task_id': task_id, 'status': 'PRECHECK', 'base_sha': base_sha,
                  'base_branch': base_branch, 'branch': branch, 'repairs': 0,
-                 'repo': str(repo), 'worktree': str(work), 'checks': args.check}
+                 'repo': str(repo), 'worktree': str(work), 'checks': args.check,
+                 'validation': 'PENDING', 'repair_history': []}
         save(state_path, state)
         try:
             # Create fresh branch without editing the user's current branch.
@@ -238,15 +239,25 @@ def run(args):
                     break
                 if not last_failure:
                     if not changed(work):
-                        state.update(status='BLOCKED', reason='Codex made no changes')
+                        state.update(status='BLOCKED', validation='BLOCKED',
+                                     reason='Codex made no changes')
                     else:
-                        state['status'] = 'LOCAL_PASS'
+                        state.update(status='LOCAL_PASS', validation='PASS',
+                                     validated_on_attempt=attempt + 1,
+                                     changed_files=changed(work))
+                        # Earlier validator failures are historical, not the final result.
+                        state.pop('last_failure', None)
+                        state.pop('reason', None)
                     save(state_path, state)
                     break
+                state['validation'] = 'FAIL'
                 state['last_failure'] = last_failure[:2000]
+                state['repair_history'].append(
+                    {'attempt': attempt + 1, 'failure': last_failure[:1200]})
                 save(state_path, state)
             else:
-                state.update(status='FAILED', reason='repair budget exhausted')
+                state.update(status='FAILED', validation='FAIL',
+                             reason='repair budget exhausted')
                 save(state_path, state)
             if state['status'] == 'LOCAL_PASS' and args.publish:
                 publish(repo, work, state, state_path, run_dir, task)
