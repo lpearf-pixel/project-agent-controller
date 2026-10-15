@@ -135,4 +135,27 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(run.returncode,2)
         self.assertIn('unsafe validator',run.stderr)
 
+class SmokeValidatorTests(unittest.TestCase):
+    def test_rejects_no_file_or_empty_output(self):
+        validator = SCRIPT.parent / 'verify-smoke.py'
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            missing = subprocess.run([sys.executable, str(validator)], cwd=root,
+                                     capture_output=True, text=True, timeout=20)
+            self.assertNotEqual(missing.returncode, 0)
+            (root / 'hello.py').write_text('pass\n')
+            empty = subprocess.run([sys.executable, str(validator)], cwd=root,
+                                   capture_output=True, text=True, timeout=20)
+            self.assertNotEqual(empty.returncode, 0)
+
+    def test_accepts_correct_output(self):
+        validator = SCRIPT.parent / 'verify-smoke.py'
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'hello.py').write_text('print("hello")\n')
+            good = subprocess.run([sys.executable, str(validator)], cwd=root,
+                                  capture_output=True, text=True, timeout=20)
+            self.assertEqual(good.returncode, 0, good.stdout + good.stderr)
+
+
 if __name__ == '__main__': unittest.main()
