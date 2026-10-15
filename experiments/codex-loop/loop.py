@@ -98,6 +98,49 @@ def doctor():
     return 0 if shutil.which('git') and auth_ok else 2
 
 
+
+def codex_result(logfile):
+    """Check structured Codex events; process exit 0 is not proof of a successful edit."""
+    seen_completed = False
+    failures = []
+    sandbox_failure = False
+    if not logfile.is_file():
+        return False, 'Codex event log missing'
+    with logfile.open(encoding='utf-8', errors='replace') as stream:
+        for line in stream:
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue  # Codex stderr and startup messages share this output stream
+            event_type = event.get('type')
+            if event_type == 'turn.completed':
+                seen_completed = True
+            if event_type in ('turn.failed', 'turn.cancelled', 'error'):
+                failures.append(str(event.get('message') or event.get('error') or event_type))
+            item = event.get('item')
+            if isinstance(item, dict):
+                if item.get('type') == 'file_change' and item.get('status') == 'failed':
+                    failures.append('Codex file_change failed')
+                if item.get('type') == 'command_execution' and item.get('exit_code') not in (None, 0):
+                    command_output = str(item.get('aggregated_output', ''))
+                    if any(marker in command_output.lower() for marker in
+                           ('bwrap:', 'rtm_newaddr', 'network namespace',
+                            'network-namespace', 'sandbox failed')):
+                        failures.append('Codex sandbox command execution failed')
+            combined = json.dumps(event, ensure_ascii=False).lower()
+            if any(marker in combined for marker in
+                   ('network-namespace error', 'bwrap:', 'rtm_newaddr',
+                    'sandbox failed', 'permission denied to create new namespace')):
+                sandbox_failure = True
+    if sandbox_failure:
+        return False, 'Linux sandbox/namespace initialization failed; repair bubblewrap/AppArmor and rerun a new task'
+    if failures:
+        return False, '; '.join(dict.fromkeys(failures))[:400]
+    if not seen_completed:
+        return False, 'Codex did not emit turn.completed'
+    return True, 'completed'
+
+
 def run(args):
     repo = args.repo.expanduser().resolve(strict=True)
     prompt_path = args.task.expanduser().resolve(strict=True)
@@ -165,6 +208,12 @@ def run(args):
                                  logfile=evidence)
                 if status:
                     raise RuntimeError(f'Codex exited {status}, see {evidence}')
+                successful, explanation = codex_result(evidence)
+                if not successful:
+                    state.update(status='BLOCKED', reason=explanation,
+                                 evidence=str(evidence))
+                    save(state_path, state)
+                    break
                 state['status'] = 'VALIDATING'
                 save(state_path, state)
                 bad = disallowed(changed(work), work)
