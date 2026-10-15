@@ -24,11 +24,16 @@ class LoopTests(unittest.TestCase):
         self.bin = self.root/'bin'
         self.bin.mkdir()
         codex = self.bin/'codex'
-        codex.write_text('#!/usr/bin/env python3\nimport os,sys,pathlib\n'
+        codex.write_text('#!/usr/bin/env python3\nimport os,sys,pathlib,json\n'
                          'if sys.argv[1:3] == ["login","status"]:\n'
                          '    print("Not logged in" if os.environ.get("FAKE_CODEX_NOAUTH") else "Logged in using ChatGPT")\n'
                          '    sys.exit(1 if os.environ.get("FAKE_CODEX_NOAUTH") else 0)\n'
                          'prompt=sys.stdin.read()\n'
+                         'if os.environ.get("FAKE_CODEX_SANDBOX_FAIL"):\n'
+                         '    print(json.dumps({"type":"item.completed","item":{"type":"file_change","status":"failed","changes":[]}}))\n'
+                         '    print(json.dumps({"type":"item.completed","item":{"type":"agent_message","text":"sandbox failed with a network-namespace error"}}))\n'
+                         '    print(json.dumps({"type":"turn.completed"}))\n'
+                         '    sys.exit(0)\n'
                          'target=pathlib.Path(os.getcwd())\n'
                          'name=os.environ.get("FAKE_CODEX_PATH","result.txt")\n'
                          '(target/name).write_text("done\\n")\n'
@@ -92,6 +97,16 @@ class LoopTests(unittest.TestCase):
         run=self.run_task()
         self.assertEqual(run.returncode,1)
         self.assertIn('BLOCKED',run.stdout)
+
+    def test_sandbox_failure_blocks_immediately(self):
+        self.env['FAKE_CODEX_SANDBOX_FAIL'] = '1'
+        run = self.run_task()
+        self.assertEqual(run.returncode, 1, run.stdout+run.stderr)
+        state = json.loads(run.stdout)
+        self.assertEqual(state['status'], 'BLOCKED')
+        self.assertIn('sandbox', state['reason'].lower())
+        logs = list((self.root / 'data' / 'runs' / state['task_id']).glob('codex-*.jsonl'))
+        self.assertEqual(len(logs), 1, 'infrastructure failure should never trigger repair attempts')
 
     def test_repair_exhaustion(self):
         run=self.run_task("python3 -c 'raise SystemExit(1)'")
