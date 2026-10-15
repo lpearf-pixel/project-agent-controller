@@ -137,10 +137,20 @@ def doctor():
 
 
 def codex_result(logfile):
-    """Check structured Codex events; process exit 0 is not proof of a successful edit."""
+    """Trust typed failure events, never literal text in successful tool output.
+
+    In a code-reading task the agent may print or quote the controller's own
+    prior sandbox incidents. A search over serialized *entire events* mistakes
+    these benign quotes for a fresh Linux namespace failure.
+    """
     seen_completed = False
     failures = []
     sandbox_failure = False
+    markers = (
+        'network-namespace error', 'bwrap:', 'rtm_newaddr',
+        'sandbox failed', 'permission denied to create new namespace',
+        'failed to create network namespace',
+    )
     if not logfile.is_file():
         return False, 'Codex event log missing'
     with logfile.open(encoding='utf-8', errors='replace') as stream:
@@ -149,30 +159,37 @@ def codex_result(logfile):
                 event = json.loads(line)
             except ValueError:
                 continue  # Codex stderr and startup messages share this output stream
+            if not isinstance(event, dict):
+                continue
             event_type = event.get('type')
             if event_type == 'turn.completed':
                 seen_completed = True
             if event_type in ('turn.failed', 'turn.cancelled', 'error'):
-                failures.append(str(event.get('message') or event.get('error') or event_type))
+                details = str(
+                    event.get('message') or event.get('error')
+                    or event.get('reason') or event_type
+                )
+                failures.append(details[:300])
+                if any(marker in details.lower() for marker in markers):
+                    sandbox_failure = True
             item = event.get('item')
-            if isinstance(item, dict):
-                if item.get('type') == 'file_change' and item.get('status') == 'failed':
-                    failures.append('Codex file_change failed')
-                if (item.get('type') == 'command_execution'
-                        and item.get('exit_code') not in (None, 0)):
-                    command_output = str(item.get('aggregated_output', ''))
-                    if any(marker in command_output.lower() for marker in
-                           ('bwrap:', 'rtm_newaddr', 'network namespace',
-                            'network-namespace', 'sandbox failed')):
-                        failures.append('Codex sandbox command execution failed')
-            combined = json.dumps(event, ensure_ascii=False).lower()
-            if any(marker in combined for marker in
-                   ('network-namespace error', 'bwrap:', 'rtm_newaddr',
-                    'sandbox failed', 'permission denied to create new namespace')):
-                sandbox_failure = True
+            if not isinstance(item, dict):
+                continue
+            if item.get('type') == 'file_change' and item.get('status') == 'failed':
+                failures.append('Codex file_change failed')
+            if (item.get('type') == 'command_execution'
+                    and item.get('exit_code') not in (None, 0)):
+                # Only nonzero command executions can be evidence of a sandbox
+                # bootstrap fault. stdout from successful searches is task data.
+                command_output = str(item.get('aggregated_output') or '')
+                if any(marker in command_output.lower() for marker in markers):
+                    sandbox_failure = True
+                    failures.append('Codex sandbox command execution failed')
     if sandbox_failure:
-        return False, ('Linux sandbox/namespace initialization failed; '
-                       'repair bubblewrap/AppArmor and rerun a new task')
+        return False, (
+            'Linux sandbox/namespace initialization failed; '
+            'inspect typed Codex errors before any system configuration change'
+        )
     if failures:
         return False, '; '.join(dict.fromkeys(failures))[:400]
     if not seen_completed:
