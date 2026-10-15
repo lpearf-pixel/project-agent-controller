@@ -144,8 +144,8 @@ def run(args):
                 save(state_path, state)
                 evidence = run_dir / f'codex-{attempt}.jsonl'
                 prompt = task if attempt == 0 else (task + '\n\nValidator failed. Repair only the failing change.\n' + last_failure[-6000:])
-                status, _ = call(['codex', 'exec', '--json', '--sandbox', 'workspace-write',
-                                  '--ask-for-approval', 'never', '--cd', str(work), '-'],
+                status, _ = call(['codex', '--ask-for-approval', 'never', 'exec', '--json',
+                                  '--sandbox', 'workspace-write', '--cd', str(work), '-'],
                                  cwd=work, stdin=prompt, timeout=args.codex_timeout,
                                  logfile=evidence)
                 if status:
