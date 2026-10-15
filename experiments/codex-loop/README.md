@@ -94,7 +94,37 @@ The original `orch-sandbox` branch remains untouched. The generated `hello.py` i
 
 Before real projects, verify the Parallels mount supports `git worktree add`, executable permissions, and Git operations; the Mac/VM shared path is **not** equivalent to native ext4. Use trusted disposable test projects only.
 
-The original checkout is not modified; a separate `auto/codex-*` worktree is created. The default is **no push**. `--publish` (trusted repos only) attempts new-branch push + Draft PR; never auto-merges. No CI polling, crash recovery, credential isolation, or scheduled background loop exists in this pilot. Do not use unattended on your real baby monitor.
+The original checkout is not modified; a separate `auto/codex-*` worktree is created. The default is **no push**. The former combined `loop.py run --publish` mode has been retired. Never auto-merge or deploy. The publisher remains under the **same Ubuntu account**, so there is no separate-user credential isolation. Do not use unattended on Baby Monitor.
+
+## Phase 2: optional GitHub publishing (explicit, offline-tested only)
+
+**Prerequisites:** `gh auth status -h github.com` succeeds under the Ubuntu user; the local source repository has a valid `origin` pointing to exactly the explicitly named GitHub repository; the task was created by the **new** runner after its validation snapshot feature was added. Older task `e475dce86248` was created before the snapshot was recorded and its disposable source repository has no GitHub remote; **it cannot be safely published**. Do not attach the controller's own remote to a disposable repository.
+
+For an eligible previously validated task in a trusted **real GitHub checkout**, publishing takes two deliberate steps; neither re-runs Codex:
+
+```bash
+cd /media/psf/chatgpt/project-agent-controller-codex-pilot
+python3 experiments/codex-loop/publish.py \
+  --task-id YOUR_NEW_TASK_ID \
+  --repository OWNER/REPOSITORY
+# Once the printed DRY_RUN summary is correct, explicitly publish:
+python3 experiments/codex-loop/publish.py \
+  --task-id YOUR_NEW_TASK_ID \
+  --repository OWNER/REPOSITORY \
+  --execute
+```
+
+The publisher re-checks saved validators, detects changes after `LOCAL_PASS`, verifies the exact GitHub `origin`, GitHub write access, immutable source base and worktree branch, then commits and pushes only the new `auto/codex-<task-id>` branch and creates a **Draft PR**. It never force pushes, edits `main`, changes real hardware, deploys, or merges. Recovery from a push followed by Draft PR creation failure can be retried with the same command. Unexpected partial commits or shifted branches deliberately require manual reconciliation.
+
+After the resulting status is `PR_DRAFT`, the read-only, one-shot CI gate is:
+
+```bash
+python3 experiments/codex-loop/ci_check.py \
+  --task-id YOUR_NEW_TASK_ID \
+  --repository OWNER/REPOSITORY
+```
+
+This checks the exact Draft PR and commit. **No checks, pending checks, failures, or a mismatched PR cannot return CI PASS.** It never modifies the branch or merges. CI-failure automatic repair, live remote publisher E2E validation, auto-scheduling and per-user credential isolation are **not yet implemented**. This phase is for trusted pilot repositories, not production.
 
 See [audit](../../docs/architecture/codex-loop-m3-pilot-audit-20261015.md).
 Note: a test that creates bytecode caches or other generated artifacts must first configure the repository's `.gitignore`; the pilot fails closed on `.pyc`, secrets, and symlink changes. `--publish` is not recommended until the separate-publisher security gate is complete.
