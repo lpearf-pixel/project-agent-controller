@@ -92,9 +92,12 @@ class PublishTests(unittest.TestCase):
                                     "HEAD:refs/heads/auto/codex-" + self.taskid, timeout=60)
             return original_git(repo, *argv, **kwargs)
 
-        with patch.object(publish, "RUNTIME", self.data), patch.object(publish, "git", fake_push):
-            with patch.dict(os.environ, self.env):
-                return publish.run(args)
+        with (
+            patch.object(publish, "RUNTIME", self.data),
+            patch.object(publish, "git", fake_push),
+            patch.dict(os.environ, self.env),
+        ):
+            return publish.run(args)
 
     def state_file(self):
         return json.loads((self.run_dir / "state.json").read_text(encoding="utf-8"))
