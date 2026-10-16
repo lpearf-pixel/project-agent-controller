@@ -183,6 +183,18 @@ alter hardware/radio state. If both endpoints have `http=000`, do
 not infer a UART wire fault; first verify service identity and HTTP
 handling. The reported historical LAN IP may change.
 
+To avoid copying the next AP HTTP probe response back into chat,
+a one-time inspection can post **only sanitized HTTP status**, phase,
+HTTP code, and numeric AP radio type/version directly to Issue #7:
+
+```bash
+OEPL_AP_IP=192.168.2.192 \
+  bash experiments/oepl-s3-c6/run_on_ubuntu.sh --inspect
+```
+
+This additional network GET is opt-in via `OEPL_AP_IP`; omitted by
+default. As before it never opens TTY ports or initiates radio self-test.
+
 `READY_FOR_HARDWARE_CHECK` means firmware configuration can be reviewed,
 **not** that USB, UART, C6 radio, RF or actual wire continuity passed.
 `TCP_REACHABLE` means only the historical S3 network endpoint accepts
