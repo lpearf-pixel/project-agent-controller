@@ -1,5 +1,4 @@
 """Offline tests for recovering uncommitted Runner edits from a read-only source."""
-import json
 import subprocess
 import sys
 import tempfile
@@ -67,6 +66,19 @@ class RunnerMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "nothing copied"):
             migrate_runner.migrate(self.source, self.dest, apply=True)
         self.assertFalse((self.dest / "experiments/codex-loop/runner/agent.py").exists())
+
+    def test_unrelated_dirty_file_does_not_block_runner(self):
+        (self.source / "notes.txt").write_text("unrelated local note\n", encoding="utf-8")
+        plan = migrate_runner.prepare(self.source, self.dest)
+        self.assertIn("notes.txt", plan["ignored_unrelated"])
+        self.assertEqual(plan["accepted"], ["experiments/codex-loop/runner/agent.py"])
+
+    def test_secret_literals_are_not_copied(self):
+        self.new.write_text("secret = 'github_pat_" + ("A" * 30) + "'\n")
+        plan = migrate_runner.prepare(self.source, self.dest)
+        self.assertIn("experiments/codex-loop/runner/agent.py", plan["rejected"])
+        with self.assertRaisesRegex(RuntimeError, "nothing copied"):
+            migrate_runner.migrate(self.source, self.dest, apply=True)
 
     def test_protected_path_fails_closed(self):
         (self.source / "experiments/codex-loop/.env").write_text("SECRET=x\n")
