@@ -54,7 +54,7 @@ def s3_config(root):
     duplicate = False
     for name in S3_FLAGS:
         matches = re.findall(
-            r"(?m)^\\s*-D\\s+" + re.escape(name) + r"\\s*=\\s*([^\\s;]+)",
+            r"(?m)^\s*-D\s+" + re.escape(name) + r"\s*=\s*([^\s;]+)",
             matched,
         )
         duplicate |= len(matches) > 1
