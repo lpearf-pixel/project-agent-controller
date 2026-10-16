@@ -8,6 +8,7 @@ touches the source .git. Conflicting remote changes fail closed.
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
@@ -85,18 +86,32 @@ def prepare(source, dest):
     if not filenames:
         raise RuntimeError("source contains no local changes to recover")
     rejects = []
+    ignored_unrelated = []
     conflicts = []
     accepted = []
     for name in filenames:
+        if not name.startswith(ALLOWED_PREFIXES):
+            ignored_unrelated.append(name)
+            continue
         if not allowed(name):
             rejects.append(name)
             continue
         src_file = source / name
         dst_file = dest / name
-        if src_file.is_symlink() or not src_file.is_file():
+        if (src_file.is_symlink() or not src_file.is_file()
+                or any(p.is_symlink() for p in src_file.parents if p != source
+                       and source in p.parents)):
             rejects.append(name)
             continue
         if src_file.stat().st_size > MAX_FILE_SIZE:
+            rejects.append(name)
+            continue
+        # Do not accidentally transport credential-like literals.
+        data = src_file.read_bytes()
+        if re.search(
+            rb"(?:github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|"
+            rb"sk-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)", data,
+        ):
             rejects.append(name)
             continue
         original = base_blob(source, source_sha, name)
@@ -106,7 +121,10 @@ def prepare(source, dest):
         if destination_base != original:
             conflicts.append(name)
             continue
-        if dst_file.is_symlink() or (dst_file.exists() and not dst_file.is_file()):
+        if (dst_file.is_symlink()
+                or any(p.is_symlink() for p in dst_file.parents if p != dest
+                       and dest in p.parents)
+                or (dst_file.exists() and not dst_file.is_file())):
             conflicts.append(name)
             continue
         if dst_file.exists() and dst_file.read_bytes() != (destination_base or b""):
@@ -116,12 +134,15 @@ def prepare(source, dest):
     return {
         "source": str(source), "destination": str(dest),
         "source_sha": source_sha, "destination_sha": dest_sha,
-        "accepted": accepted, "rejected": rejects, "conflicts": conflicts,
+        "accepted": accepted, "rejected": rejects,
+        "ignored_unrelated": ignored_unrelated, "conflicts": conflicts,
     }
 
 
 def migrate(source, dest, apply=False):
     plan = prepare(source, dest)
+    if not plan["accepted"]:
+        raise RuntimeError("no eligible Runner changes found; nothing copied")
     if plan["rejected"] or plan["conflicts"]:
         plan["status"] = "BLOCKED"
         print(json.dumps(plan, indent=2))
