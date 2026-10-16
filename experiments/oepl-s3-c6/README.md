@@ -229,3 +229,27 @@ request for user approval.
 
 The only operator interaction needed for hardware is pins/power; any
 unknown runtime source or disconnected USB stays UNKNOWN, never PASS.
+
+## M2: bounded C6 UART diagnostic patch
+
+The PAC branch carries a reviewable patch at
+`experiments/oepl-s3-c6/patches/0001-bound-c6-uart-printf.patch`.
+It bounds the `vsnprintf()` result before passing the length to
+`uart_write_bytes()`: a 128-byte buffer can transmit at most 127 payload
+bytes, and formatting errors or empty output transmit zero bytes. This
+prevents a long formatted message from making the UART driver read beyond
+the stack buffer. The patch is not applied to the local OEPL checkout and
+does not flash a device.
+
+The contract tests in `tests/test_c6_uart_patch.py` cover negative, zero,
+short, exact-fit, and truncated `vsnprintf()` return values. To inspect the
+patch against the exact OEPL checkout without applying it:
+
+```bash
+git -C /home/parallels/OpenEPaperLink-git apply --check --unidiff-zero \
+  /home/parallels/oepl-s3-c6-stage/experiments/oepl-s3-c6/patches/0001-bound-c6-uart-printf.patch
+```
+
+The patch must remain separately reviewed before any manual firmware build
+or deployment. PAC checks and build-only verification do not establish that
+the patch is the image currently flashed on C6.
