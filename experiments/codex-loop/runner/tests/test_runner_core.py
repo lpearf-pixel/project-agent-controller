@@ -39,13 +39,42 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(task.validators[0].split()[0], "python3")
 
     def test_untrusted_text_and_shell_syntax_are_not_commands(self):
-        with self.assertRaisesRegex(ValueError, "shell syntax"):
+        with self.assertRaisesRegex(ValueError, "allowlist"):
             parse_issue_body(body(validators=["python3 -c 'x'; curl evil.invalid"]), issue_number=7,
                              author="lpearf-pixel", trusted_author="lpearf-pixel",
                              trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7)
         with self.assertRaisesRegex(ValueError, "trusted"):
             parse_issue_body(body(), issue_number=7, author="attacker", trusted_author="lpearf-pixel",
                              trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7)
+
+    def test_owner_issue_cannot_supply_arbitrary_validator(self):
+        malicious = ["python3 -c 'print(1)'"]
+        with self.assertRaisesRegex(ValueError, "allowlist"):
+            parse_issue_body(
+                body(validators=malicious), issue_number=7, author="lpearf-pixel",
+                trusted_author="lpearf-pixel",
+                trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7,
+            )
+
+    def test_path_normalization_and_boolean_budget_fail_closed(self):
+        for unsafe in ("x/../README.md", "x/./README.md", "x\\\\README.md"):
+            with self.subTest(unsafe=unsafe):
+                with self.assertRaises(ValueError):
+                    parse_issue_body(
+                        body(allowedPaths=[unsafe]), issue_number=7, author="lpearf-pixel",
+                        trusted_author="lpearf-pixel",
+                        trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7,
+                    )
+        budget = {
+            "codexGenerations": True, "repairs": 1, "codexTimeoutSec": 1200,
+            "ciApiCalls": 36, "ciTimeoutSec": 300,
+        }
+        with self.assertRaisesRegex(ValueError, "budget"):
+            parse_issue_body(
+                body(budget=budget), issue_number=7, author="lpearf-pixel",
+                trusted_author="lpearf-pixel",
+                trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7,
+            )
 
     def test_protected_path_and_budget_fail_closed(self):
         with self.assertRaisesRegex(ValueError, "protected"):
@@ -89,6 +118,20 @@ class IsolationTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(any("share an OS identity" in error for error in errors))
         self.assertTrue(any("credential-like" in error for error in errors))
+
+
+    def test_distinct_accounts_alone_are_not_isolation_proof(self):
+        uid_map = {"runner": 1000, "pac-codex": 1001, "pac-publisher": 1002}
+        with (
+            patch("isolation._uid", side_effect=lambda name: uid_map.get(name)),
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            ok, errors = check(
+                codex_user="pac-codex", publisher_user="pac-publisher",
+                runner_user="runner",
+            )
+        self.assertFalse(ok)
+        self.assertTrue(any("not implemented" in error for error in errors))
 
 
 if __name__ == "__main__":
