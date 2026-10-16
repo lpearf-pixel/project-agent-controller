@@ -76,6 +76,7 @@ class TTYTests(unittest.TestCase):
         self.assertEqual(result["fields"]["ap_version"], 33)
         self.assertEqual(result["fields"]["flashpin_defaults"]["txd"], 13)
         self.assertEqual(conn.called[0:2], ("GET", "/sysinfo"))
+        self.assertEqual(conn.called[2]["Connection"], "close")
         self.assertNotIn("private-room", str(result))
         self.assertNotIn("private.example.invalid", str(result))
         self.assertNotIn("UART_PASS", str(result))
@@ -112,6 +113,30 @@ class TTYTests(unittest.TestCase):
             self.assertEqual(result["code"], 200)
             self.assertEqual(result["bytes"], len(b"broken json"))
             self.assertNotIn("broken json", str(result))
+
+    def test_ap_response_body_timeout_reports_phase_not_content(self):
+        class Reply:
+            status = 200
+
+            def read(self, _):
+                raise TimeoutError("private response timed out")
+
+        class Connection:
+            def request(self, *_args, **_kwargs):
+                pass
+
+            def getresponse(self):
+                return Reply()
+
+            def close(self):
+                pass
+
+        with patch.object(
+            wired_probe.http.client, "HTTPConnection", return_value=Connection()
+        ):
+            report = wired_probe.http_sysinfo("192.168.2.192", 80)
+        self.assertEqual(report, {"status": "HTTP_TIMEOUT", "phase": "BODY"})
+        self.assertNotIn("private response", str(report))
 
     def test_ap_http_non_200_carries_only_status_code(self):
         class Reply:
@@ -156,7 +181,7 @@ class TTYTests(unittest.TestCase):
                     wired_probe.http.client, "HTTPConnection", return_value=Connection(error)
                 ):
                     outcome = wired_probe.http_sysinfo("192.168.2.192", 80)
-                self.assertEqual(outcome, {"status": expected})
+                self.assertEqual(outcome, {"status": expected, "phase": "REQUEST"})
                 self.assertNotIn("secret", str(outcome))
 
     def test_tcp_socket_never_implies_uart_success(self):
