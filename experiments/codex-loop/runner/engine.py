@@ -10,15 +10,12 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-LOOP_ROOT = Path(__file__).resolve().parents[1]
-if str(LOOP_ROOT) not in sys.path:
-    sys.path.insert(0, str(LOOP_ROOT))
 from github import GitHubClient
 from isolation import check
 from manifest import TaskManifest, parse_issue_body
 from state import StateStore
-from ci_check import classify_checks, classify_statuses
 
+LOOP_ROOT = Path(__file__).resolve().parents[1]
 HERE = LOOP_ROOT
 
 
@@ -161,6 +158,11 @@ class Runner:
         )
 
     def check_ci(self, manifest: TaskManifest, state: dict) -> dict:
+        # Delayed import: ci_check.py is a sibling of runner/, not on the CLI path.
+        if str(LOOP_ROOT) not in sys.path:
+            sys.path.insert(0, str(LOOP_ROOT))
+        from ci_check import classify_checks, classify_statuses
+
         state = self.store.transition(manifest.task_id, "CI_CHECKING", "observing exact Draft PR head")
         client = GitHubClient(manifest.repo, max_calls=manifest.budget["ciApiCalls"])
         deadline = time.monotonic() + manifest.budget["ciTimeoutSec"]
