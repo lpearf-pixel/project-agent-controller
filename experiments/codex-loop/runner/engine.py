@@ -1,11 +1,13 @@
 """One-task-at-a-time PAC runner engine."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
 import sys
 import time
+from dataclasses import asdict
 from pathlib import Path
 
 LOOP_ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +51,11 @@ class Runner:
         return tasks
 
     def run_once(self, *, execute: bool = False) -> dict:
+        # A locked file descriptor must remain open for the complete task.
+        with self.store.lock():
+            return self._run_once_locked(execute=execute)
+
+    def _run_once_locked(self, *, execute: bool = False) -> dict:
         ok, errors = self.doctor()
         if not ok:
             return {"status": "BLOCKED", "reason": "credential isolation failed", "errors": errors}
@@ -57,10 +64,29 @@ class Runner:
         if not tasks:
             return {"status": "IDLE", "reason": "no trusted queued task"}
         manifest = tasks[0]
-        state = self.store.create(manifest.task_id, {"repo": manifest.repo, "base_sha": manifest.base_sha,
-            "base_branch": manifest.base_branch, "issue_number": manifest.issue_number,
-            "allowed_paths": list(manifest.allowed_paths), "checks": list(manifest.validators),
-            "budget": manifest.budget, "execution_type": manifest.execution_type})
+        fingerprint = hashlib.sha256(
+            json.dumps(asdict(manifest), sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        state = self.store.create(
+            manifest.task_id,
+            {
+                "repo": manifest.repo,
+                "base_sha": manifest.base_sha,
+                "base_branch": manifest.base_branch,
+                "issue_number": manifest.issue_number,
+                "allowed_paths": list(manifest.allowed_paths),
+                "checks": list(manifest.validators),
+                "budget": manifest.budget,
+                "execution_type": manifest.execution_type,
+                "manifest_sha256": fingerprint,
+            },
+        )
+        if state.get("manifest_sha256") != fingerprint:
+            return {
+                "status": "BLOCKED",
+                "reason": "task manifest changed after first discovery",
+                "task_id": manifest.task_id,
+            }
         if state["status"] in {"CI_PASS", "BLOCKED", "FAILED", "CI_FAIL", "TIMEOUT", "NEEDS_HARDWARE"}:
             return state
         if not execute:
@@ -80,8 +106,16 @@ class Runner:
             state = self.store.transition(task_id, "CODING", "starting bounded Codex generation")
             if not self.repo_path.is_dir():
                 return self.store.transition(task_id, "BLOCKED", "configured local checkout is missing")
-            command = [sys.executable, str(HERE / "loop.py"), "run", "--repo", str(self.repo_path),
-                       "--task", str(prompt), "--repairs", str(manifest.budget["repairs"])]
+            # Only validated, preapproved checks from manifest.py reach loop.py.
+            # Without --check, the existing loop rejects every task.
+            command = [
+                sys.executable, str(HERE / "loop.py"), "run",
+                "--repo", str(self.repo_path), "--task", str(prompt),
+                "--repairs", str(manifest.budget["repairs"]),
+                "--codex-timeout", str(manifest.budget["codexTimeoutSec"]),
+            ]
+            for validator in manifest.validators:
+                command.extend(["--check", validator])
             try:
                 result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, timeout=manifest.budget["codexTimeoutSec"],
@@ -91,7 +125,7 @@ class Runner:
             if result.returncode not in (0, 1):
                 return self.store.transition(task_id, "FAILED", "Codex loop invocation failed")
             try:
-                loop_state = json.loads(result.stdout.strip().splitlines()[-1])
+                loop_state = json.loads(result.stdout)
             except (ValueError, IndexError):
                 return self.store.transition(task_id, "FAILED", "Codex loop returned no state")
             if loop_state.get("status") == "BLOCKED":
@@ -116,7 +150,18 @@ class Runner:
         return state
 
     def publish(self, manifest: TaskManifest, state: dict) -> dict:
-        """Invoke the existing publisher only under its dedicated OS identity."""
+        """Stop until a credential-isolated publisher transport exists.
+
+        A systemd --user process cannot safely invoke runuser to switch to
+        pac-publisher, and merely changing HOME is not a security boundary.
+        """
+        return self.store.transition(
+            manifest.task_id, "BLOCKED",
+            "no verified cross-user publisher transport; cannot publish unattended",
+        )
+
+    def _legacy_publish_disabled(self, manifest: TaskManifest, state: dict) -> dict:
+        # Never invoked: retained only for audit while a safe broker is designed.
         command = ["runuser", "-u", self.publisher_user, "--", sys.executable,
                    str(HERE / "publish.py"), "--task-id", state["loop_task_id"],
                    "--repository", manifest.repo, "--execute"]
@@ -128,7 +173,7 @@ class Runner:
         if result.returncode:
             return self.store.transition(manifest.task_id, "FAILED", "isolated Publisher failed")
         try:
-            published = json.loads(result.stdout.strip().splitlines()[-1])
+            published = json.loads(result.stdout)
         except (ValueError, IndexError):
             return self.store.transition(manifest.task_id, "FAILED", "Publisher returned no state")
         if published.get("status") != "PR_DRAFT":
