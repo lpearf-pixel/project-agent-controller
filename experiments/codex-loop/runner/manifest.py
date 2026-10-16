@@ -109,8 +109,8 @@ def parse_issue_body(
     for item in validators:
         if not isinstance(item, str) or not item or len(item) > 500:
             raise ValueError("invalid validator")
-        if any(token in item for token in (";", "&&", "||", "|", "`", "$(", "\n")):
-            raise ValueError("validator contains shell syntax")
+        if item not in APPROVED_VALIDATORS:
+            raise ValueError("validator is not in the installed trusted allowlist")
         safe_validators.append(item)
     budget = raw["budget"]
     if not isinstance(budget, dict) or set(budget) != {
