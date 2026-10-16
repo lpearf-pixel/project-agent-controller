@@ -111,6 +111,11 @@ lines = [
 wired_path = pathlib.Path(sys.argv[5])
 if wired_path.is_file():
     wired_data = json.loads(wired_path.read_text(encoding="utf-8"))
+    root = wired_data.get("ap_root", {})
+    lines.append(f"- AP root HTTP status: `{root.get('status', 'UNKNOWN')}`")
+    lines.append(f"- AP root HTTP phase: `{root.get('phase', 'none')}`")
+    if type(root.get("code")) is int:
+        lines.append(f"- AP root response code: `{root['code']}`")
     ap = wired_data.get("ap_sysinfo", {})
     metadata = ap.get("fields", {}) if isinstance(ap.get("fields"), dict) else {}
     lines.append(f"- AP read-only HTTP status: `{ap.get('status', 'UNKNOWN')}`")
