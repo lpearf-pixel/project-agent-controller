@@ -160,28 +160,6 @@ class Runner:
             "no verified cross-user publisher transport; cannot publish unattended",
         )
 
-    def _legacy_publish_disabled(self, manifest: TaskManifest, state: dict) -> dict:
-        # Never invoked: retained only for audit while a safe broker is designed.
-        command = ["runuser", "-u", self.publisher_user, "--", sys.executable,
-                   str(HERE / "publish.py"), "--task-id", state["loop_task_id"],
-                   "--repository", manifest.repo, "--execute"]
-        try:
-            result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, timeout=180, check=False)
-        except subprocess.TimeoutExpired:
-            return self.store.transition(manifest.task_id, "TIMEOUT", "Publisher exceeded budget")
-        if result.returncode:
-            return self.store.transition(manifest.task_id, "FAILED", "isolated Publisher failed")
-        try:
-            published = json.loads(result.stdout)
-        except (ValueError, IndexError):
-            return self.store.transition(manifest.task_id, "FAILED", "Publisher returned no state")
-        if published.get("status") != "PR_DRAFT":
-            return self.store.transition(manifest.task_id, "FAILED", "Publisher did not create Draft PR")
-        state = self.store.transition(manifest.task_id, "PR_DRAFT", "Draft PR created",
-                                      pr_url=published.get("pr_url"), publish_commit=published.get("publish_commit"))
-        return self.check_ci(manifest, state)
-
     def check_ci(self, manifest: TaskManifest, state: dict) -> dict:
         state = self.store.transition(manifest.task_id, "CI_CHECKING", "observing exact Draft PR head")
         client = GitHubClient(manifest.repo, max_calls=manifest.budget["ciApiCalls"])
