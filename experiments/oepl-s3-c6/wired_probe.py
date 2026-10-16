@@ -50,11 +50,17 @@ def http_sysinfo(ip: str | None, port: int, timeout: float = 3.0) -> dict:
     except ipaddress.AddressValueError:
         return {"status": "INVALID_TARGET"}
     conn = http.client.HTTPConnection(str(address), port, timeout=timeout)
+    phase = "REQUEST"
     try:
-        conn.request("GET", "/sysinfo", headers={"Accept": "application/json"})
+        conn.request(
+            "GET", "/sysinfo",
+            headers={"Accept": "application/json", "Connection": "close"},
+        )
+        phase = "HEADERS"
         response = conn.getresponse()
         if response.status != 200:
             return {"status": "HTTP_NOT_AVAILABLE", "code": response.status}
+        phase = "BODY"
         raw = response.read(16_385)
         if len(raw) > 16_384:
             return {"status": "RESPONSE_TOO_LARGE", "code": 200}
@@ -81,18 +87,20 @@ def http_sysinfo(ip: str | None, port: int, timeout: float = 3.0) -> dict:
         return {
             "status": "HTTP_INFO_OBSERVED",
             "fields": details,
-            "interpretation": "AP-reported state only; not proof of live UART or flashed C6 identity",
+            "interpretation": (
+                "AP-reported state only; not proof of live UART or flashed C6 identity"
+            ),
         }
-    except (TimeoutError, socket.timeout):
-        return {"status": "HTTP_TIMEOUT"}
+    except TimeoutError:
+        return {"status": "HTTP_TIMEOUT", "phase": phase}
     except (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError):
-        return {"status": "HTTP_CONNECTION_CLOSED"}
+        return {"status": "HTTP_CONNECTION_CLOSED", "phase": phase}
     except http.client.IncompleteRead:
-        return {"status": "HTTP_INCOMPLETE_RESPONSE"}
+        return {"status": "HTTP_INCOMPLETE_RESPONSE", "phase": phase}
     except http.client.HTTPException:
-        return {"status": "HTTP_PROTOCOL_ERROR"}
+        return {"status": "HTTP_PROTOCOL_ERROR", "phase": phase}
     except OSError:
-        return {"status": "HTTP_TRANSPORT_ERROR"}
+        return {"status": "HTTP_TRANSPORT_ERROR", "phase": phase}
     finally:
         conn.close()
 
