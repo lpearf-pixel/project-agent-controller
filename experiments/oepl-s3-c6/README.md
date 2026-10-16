@@ -155,6 +155,34 @@ is useful AP-reported radio metadata, **not** a fresh wire-continuity
 test or proof that the installed C6 firmware matches this checkout.
 No HTTP POST or `/radio_selftest` execution is performed.
 
+### HTTP diagnostics after a TCP-only success
+
+If TCP port 80 accepts connections but `/sysinfo` was previously
+`HTTP_UNAVAILABLE`, update this branch and rerun `wired_probe.py`.
+The new response distinguishes transport failure, request/header/body
+timeout, premature disconnect, protocol errors, invalid JSON, and non-200
+HTTP status. It only reports error *types*, not raw response bodies, URLs,
+Wi-Fi details, credentials or tag database contents. HTTP sends
+`Connection: close` to avoid hanging on a keep-alive stream.
+
+For a second independent, non-destructive check in Ubuntu, compare only
+HTTP response codes while **bypassing shell HTTP proxies**:
+
+```bash
+for endpoint in / /sysinfo; do
+  curl --noproxy '*' --silent --show-error --max-time 6 \
+    --output /dev/null \
+    --write-out "endpoint=$endpoint http=%{http_code} seconds=%{time_total}\n" \
+    "http://192.168.2.192$endpoint" || true
+done
+```
+
+`curl` output is status-only; no raw headers/body are printed. **Do not
+POST** to `/radio_selftest` or `/update_c6`: those operations can
+alter hardware/radio state. If both endpoints have `http=000`, do
+not infer a UART wire fault; first verify service identity and HTTP
+handling. The reported historical LAN IP may change.
+
 `READY_FOR_HARDWARE_CHECK` means firmware configuration can be reviewed,
 **not** that USB, UART, C6 radio, RF or actual wire continuity passed.
 `TCP_REACHABLE` means only the historical S3 network endpoint accepts
