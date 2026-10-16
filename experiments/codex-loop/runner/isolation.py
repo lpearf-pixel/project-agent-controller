@@ -1,4 +1,5 @@
 """Credential isolation checks; absence is a hard failure."""
+
 from __future__ import annotations
 
 import os
@@ -13,7 +14,9 @@ def _uid(name: str) -> int | None:
         return None
 
 
-def check(*, codex_user: str, publisher_user: str, runner_user: str | None = None) -> tuple[bool, list[str]]:
+def check(
+    *, codex_user: str, publisher_user: str, runner_user: str | None = None
+) -> tuple[bool, list[str]]:
     errors: list[str] = []
     ids = {name: _uid(name) for name in (codex_user, publisher_user, runner_user) if name}
     if ids.get(codex_user) is None:
@@ -28,16 +31,18 @@ def check(*, codex_user: str, publisher_user: str, runner_user: str | None = Non
     if str(home) in ("/", ""):
         errors.append("invalid runner HOME")
     sensitive_names = ("TOKEN", "SECRET", "PASSWORD", "PRIVATE_KEY")
-    inherited = {key for key in os.environ if any(word in key.upper() for word in sensitive_names)
-                 or key.upper() in {"GH_TOKEN", "GITHUB_TOKEN"}}
+    inherited = {
+        key
+        for key in os.environ
+        if any(word in key.upper() for word in sensitive_names)
+        or key.upper() in {"GH_TOKEN", "GITHUB_TOKEN"}
+    }
     if inherited:
         errors.append("credential-like environment inherited: " + ",".join(sorted(inherited)))
     # Existence of two passwd entries does NOT demonstrate effective identity,
     # filesystem ACL isolation, credential separation or a safe publisher IPC.
     # Block unattended execution until separately proven by an OS-level broker.
-    errors.append(
-        "isolated Codex executor and Publisher IPC are not implemented/verified"
-    )
+    errors.append("isolated Codex executor and Publisher IPC are not implemented/verified")
     return False, errors
 
 
