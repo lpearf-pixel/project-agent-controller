@@ -27,7 +27,13 @@ class OEPLProbeTests(unittest.TestCase):
             "[env:OTHER_AP]\n-D FLASHER_AP_TXD=2\n",
             encoding="utf-8",
         )
-        (self.c6 / "sdkconfig.defaults").write_text(
+        self.sdk_defaults = self.c6 / "sdkconfig.defaults"
+        self.sdk_active = self.c6 / "sdkconfig"
+        self.sdk_defaults.write_text(
+            "CONFIG_OEPL_HARDWARE_UART_RX=2\n"
+            "CONFIG_OEPL_HARDWARE_UART_TX=3\n", encoding="utf-8",
+        )
+        self.sdk_active.write_text(
             "CONFIG_OEPL_HARDWARE_UART_RX=2\n"
             "CONFIG_OEPL_HARDWARE_UART_TX=3\n"
             "CONFIG_WIFI_PASSWORD=\"secret-never-print\"\n", encoding="utf-8",
@@ -49,10 +55,29 @@ class OEPLProbeTests(unittest.TestCase):
         self.assertEqual(status["status"], "CONFIG_MISMATCH")
 
     def test_missing_c6_config_is_unknown_not_success(self):
-        (self.c6 / "sdkconfig.defaults").unlink()
+        self.sdk_active.unlink()
         self.assertEqual(probe.c6_config(self.root)["status"], "UNKNOWN")
         with patch.object(probe, "usb_ports", return_value=[]):
             self.assertEqual(probe.report(self.root)["status"], "NEEDS_READ_ONLY_INSPECTION")
+
+    def test_sdkconfig_defaults_alone_never_passes(self):
+        self.sdk_active.unlink()
+        self.assertEqual(probe.c6_config(self.root)["status"], "UNKNOWN")
+
+    def test_active_settings_override_defaults_and_fail_mismatch(self):
+        self.sdk_active.write_text(
+            "CONFIG_OEPL_HARDWARE_UART_RX=9\n"
+            "CONFIG_OEPL_HARDWARE_UART_TX=3\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(probe.c6_config(self.root)["status"], "MISMATCH")
+        with patch.object(probe, "usb_ports", return_value=[]):
+            self.assertEqual(probe.report(self.root)["status"], "CONFIG_MISMATCH")
+
+    def test_duplicate_active_uart_flag_fails_closed(self):
+        with self.sdk_active.open("a", encoding="utf-8") as handle:
+            handle.write("CONFIG_OEPL_HARDWARE_UART_RX=2\n")
+        self.assertEqual(probe.c6_config(self.root)["status"], "MISMATCH")
 
     def test_source_missing_fail_closed(self):
         self.assertEqual(probe.report(self.root / "missing")["status"], "SOURCE_MISSING")
