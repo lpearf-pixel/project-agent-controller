@@ -74,7 +74,7 @@ def c6_config(root):
     values = {}
     duplicate = False
     for name in C6_FLAGS:
-        matches = re.findall(r"(?m)^" + re.escape(name) + r"=(\\d+)\\s*$", body)
+        matches = re.findall(r"(?m)^" + re.escape(name) + r"=(\d+)\s*$", body)
         duplicate |= len(matches) > 1
         values[name] = matches[0] if len(matches) == 1 else None
     if duplicate:
