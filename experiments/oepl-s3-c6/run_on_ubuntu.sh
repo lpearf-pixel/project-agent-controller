@@ -90,10 +90,10 @@ build = (json.loads(build_path.read_text(encoding="utf-8"))
 lines = [
     "Automated **non-flashing** OEPL S3/C6 probe:",
     "",
-    f"- Source commit: \`{inventory.get('source_sha') or 'unknown'}\`",
+    f"- Source commit: `{inventory.get('source_sha') or 'unknown'}`",
     f"- Configuration gate: **{inventory['status']}**",
-    f"- S3 PlatformIO flags: \`{inventory.get('s3', {}).get('flags', {})}\`",
-    f"- C6 IDF UART flags: \`{inventory.get('c6', {}).get('flags', {})}\`",
+    f"- S3 PlatformIO flags: `{inventory.get('s3', {}).get('flags', {})}`",
+    f"- C6 IDF UART flags: `{inventory.get('c6', {}).get('flags', {})}`",
     f"- USB serial IDs present: {len(inventory.get('usb_serial_ids', []))}",
     f"- Build outcomes: {build or 'not requested'}",
     "- No flashing, resetting, GPIO changes, power wiring or tag commands performed.",
