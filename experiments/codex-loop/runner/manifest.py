@@ -11,6 +11,11 @@ TASK_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{2,63}\Z")
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 SAFE_EXEC = {"codex"}
+# Validator commands are security-sensitive programs, not GitHub Issue instructions.
+# This is the sole preapproved command for the initial OEPL software pilot.
+APPROVED_VALIDATORS = {
+    "python3 -m unittest discover -s experiments/oepl-s3-c6/tests -v",
+}
 BLOCKED = (".git", ".codex", ".env", ".github/workflows", "AGENTS.md")
 MANIFEST_RE = re.compile(r"```(?:json|pac-task)\s*(\{.*?\})\s*```", re.S | re.I)
 
@@ -31,12 +36,18 @@ class TaskManifest:
 
 
 def _safe_path(value: Any) -> str:
-    if not isinstance(value, str) or not value or value.startswith("/"):
+    if (not isinstance(value, str) or not value or value.startswith("/")
+            or "\\" in value or "\x00" in value):
         raise ValueError("allowed path must be relative")
     path = PurePosixPath(value)
-    if any(part in ("", ".", "..") for part in path.parts):
+    if (any(part in ("", ".", "..") for part in value.split("/"))
+            or path.as_posix() != value):
         raise ValueError("unsafe allowed path")
-    if any(value == item or value.startswith(item + "/") for item in BLOCKED):
+    if any(
+        value == item or value.startswith(item + "/")
+        or item in path.parts
+        for item in BLOCKED
+    ):
         raise ValueError("protected path is not allowed")
     return value
 
@@ -93,10 +104,14 @@ def parse_issue_body(body: str, *, issue_number: int, author: str,
     safe_budget: dict[str, int] = {}
     for key, limit in limits.items():
         value = budget[key]
-        if not isinstance(value, int) or value < 0 or value > limit:
+        if type(value) is not int or value < 0 or value > limit:
             raise ValueError(f"budget exceeds {key} limit")
         safe_budget[key] = value
-    if raw["executionType"] not in SAFE_EXEC:
+    if safe_budget["codexGenerations"] != 1 or safe_budget["codexTimeoutSec"] == 0:
+        raise ValueError("invalid generation budget")
+    if safe_budget["ciApiCalls"] < 3 or safe_budget["ciTimeoutSec"] == 0:
+        raise ValueError("invalid CI budget")
+    if not isinstance(raw["executionType"], str) or raw["executionType"] not in SAFE_EXEC:
         raise ValueError("unsupported execution type")
     prompt = raw["prompt"]
     if not isinstance(prompt, str) or not (10 <= len(prompt) <= 40_000):
