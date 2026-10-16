@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """PAC Ubuntu runner command line."""
+
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -14,12 +14,29 @@ from engine import load_runner
 
 
 def data_dir() -> Path:
-    return Path(os.environ.get("PAC_CODEX_LOOP_DATA", str(Path.home() / ".local/share/pac-codex-loop"))) / "runner"
+    return (
+        Path(
+            os.environ.get("PAC_CODEX_LOOP_DATA", str(Path.home() / ".local/share/pac-codex-loop"))
+        )
+        / "runner"
+    )
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("dry-run", "run-once", "health", "status", "doctor", "stop", "restart", "uninstall"))
+    parser.add_argument(
+        "command",
+        choices=(
+            "dry-run",
+            "run-once",
+            "health",
+            "status",
+            "doctor",
+            "stop",
+            "restart",
+            "uninstall",
+        ),
+    )
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
@@ -32,14 +49,29 @@ def main(argv=None) -> int:
     if args.command in ("dry-run", "run-once"):
         result = runner.run_once(execute=args.command == "run-once" and args.execute)
         print(json.dumps(result, indent=2, ensure_ascii=False))
-        return 0 if result.get("status") in ("DRY_RUN", "IDLE", "LOCAL_PASS", "PUBLISHING", "PR_DRAFT", "CI_PASS") else 2
+        return (
+            0
+            if result.get("status")
+            in ("DRY_RUN", "IDLE", "LOCAL_PASS", "PUBLISHING", "PR_DRAFT", "CI_PASS")
+            else 2
+        )
     if args.command == "health":
-        print(json.dumps({"service": "pac-codex-runner", "data": str(root),
-                          "runner_lock": (root / "runner.lock").exists()}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "service": "pac-codex-runner",
+                    "data": str(root),
+                    "runner_lock": (root / "runner.lock").exists(),
+                },
+                indent=2,
+            )
+        )
         return 0
     if args.command == "status":
         rows = []
-        for path in sorted((root / "runs").glob("*/state.json")) if (root / "runs").exists() else []:
+        for path in (
+            sorted((root / "runs").glob("*/state.json")) if (root / "runs").exists() else []
+        ):
             try:
                 rows.append(json.loads(path.read_text(encoding="utf-8")))
             except (OSError, ValueError):
@@ -47,7 +79,9 @@ def main(argv=None) -> int:
         print(json.dumps(rows, indent=2, ensure_ascii=False))
         return 0
     if args.command == "stop":
-        return subprocess.call(["systemctl", "--user", "stop", "pac-codex-runner.timer", "pac-codex-runner.service"])
+        return subprocess.call(
+            ["systemctl", "--user", "stop", "pac-codex-runner.timer", "pac-codex-runner.service"]
+        )
     if args.command == "restart":
         return subprocess.call(["systemctl", "--user", "restart", "pac-codex-runner.timer"])
     if args.command == "uninstall":
