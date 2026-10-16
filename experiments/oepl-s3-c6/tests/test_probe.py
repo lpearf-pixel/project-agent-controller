@@ -60,6 +60,30 @@ class OEPLProbeTests(unittest.TestCase):
         with patch.object(probe, "usb_ports", return_value=[]):
             self.assertEqual(probe.report(self.root)["status"], "NEEDS_READ_ONLY_INSPECTION")
 
+    def test_s3_duplicate_flag_rejected(self):
+        with self.ini.open("a", encoding="utf-8") as handle:
+            handle.write("-D FLASHER_AP_TXD=13\n")
+        # The appended flag is under a different env: should not pollute target.
+        self.assertEqual(probe.s3_config(self.root)["status"], "PASS")
+        raw = self.ini.read_text(encoding="utf-8")
+        self.ini.write_text(
+            raw.replace(
+                "-D FLASHER_AP_RXD=14\n",
+                "-D FLASHER_AP_RXD=14\n-D FLASHER_AP_RXD=15\n",
+            ), encoding="utf-8",
+        )
+        self.assertEqual(probe.s3_config(self.root)["status"], "MISMATCH")
+
+    def test_s3_missing_flag_is_unknown(self):
+        self.ini.write_text(
+            self.ini.read_text(encoding="utf-8").replace(
+                "-D FLASHER_AP_RXD=14\n", ""
+            ), encoding="utf-8",
+        )
+        self.assertEqual(probe.s3_config(self.root)["status"], "UNKNOWN")
+        with patch.object(probe, "usb_ports", return_value=[]):
+            self.assertEqual(probe.report(self.root)["status"], "NEEDS_READ_ONLY_INSPECTION")
+
     def test_sdkconfig_defaults_alone_never_passes(self):
         self.sdk_active.unlink()
         self.assertEqual(probe.c6_config(self.root)["status"], "UNKNOWN")
