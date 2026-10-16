@@ -1,0 +1,30 @@
+name: OEPL S3+C6 Offline Safety Gate
+
+on:
+  pull_request:
+    paths:
+      - "experiments/oepl-s3-c6/**"
+      - ".github/workflows/oepl-s3-c6-pilot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+      - name: Compile probe
+        run: |
+          python3 -m py_compile experiments/oepl-s3-c6/probe.py
+      - name: Check safe shell entry points
+        run: |
+          bash -n experiments/oepl-s3-c6/run_on_ubuntu.sh
+          bash -n experiments/oepl-s3-c6/install-user-timer.sh
+      - name: Verify offline hardware gates with fixtures only
+        run: |
+          python3 -m unittest discover -s experiments/oepl-s3-c6/tests -v
