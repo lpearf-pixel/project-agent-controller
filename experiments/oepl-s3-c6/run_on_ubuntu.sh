@@ -52,6 +52,16 @@ if [[ "$MODE" == "--build-only" ]]; then
       c6_build="PASS"
     fi
   fi
+  # ESP-IDF builds can generate/change active sdkconfig. Re-inspect after
+  # compilation so the report reflects effective post-build GPIO settings.
+  python3 "$PAC_ROOT/experiments/oepl-s3-c6/probe.py" \
+    --source "$SOURCE" --output "$report"
+  post_status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["status"])' "$report")"
+  if [[ "$post_status" != "READY_FOR_HARDWARE_CHECK" ]]; then
+    echo "Post-build UART pin configuration was not verified; no hardware claim." >&2
+    build_incomplete=1
+  fi
+
   # Only summary and bounded diagnostics are emitted, never raw logs.
   printf '{"s3_build":"%s","c6_build":"%s"}\n' "$s3_build" "$c6_build" \
     >"$STATE_DIR/build-summary.json"
