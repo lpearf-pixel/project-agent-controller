@@ -146,6 +146,15 @@ publishes only sanitized config status, GPIO pin values, and the count of
 USB serial entries to Issue #7 if GitHub CLI is authenticated; it never
 publishes a private serial transcript.
 
+The `wired_probe.py` command also sends a read-only **GET
+`/sysinfo`** to the private LAN AP. OpenEPaperLink exposes its
+`env`, `ap_version`, `ap_type` and `flashpin_defaults` there.
+The output allowlists only those diagnostic fields and never exports
+the AP alias, Wi-Fi details or tag database. A non-zero `ap_version`
+is useful AP-reported radio metadata, **not** a fresh wire-continuity
+test or proof that the installed C6 firmware matches this checkout.
+No HTTP POST or `/radio_selftest` execution is performed.
+
 `READY_FOR_HARDWARE_CHECK` means firmware configuration can be reviewed,
 **not** that USB, UART, C6 radio, RF or actual wire continuity passed.
 `TCP_REACHABLE` means only the historical S3 network endpoint accepts
