@@ -56,9 +56,9 @@ class StateStore:
         handle = self.lock_path.open("a+")
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+        except BlockingIOError as exc:
             handle.close()
-            raise RuntimeError("another PAC runner is active")
+            raise RuntimeError("another PAC runner is active") from exc
         return handle
 
     def path(self, task_id: str) -> Path:
