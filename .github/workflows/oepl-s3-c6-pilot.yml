@@ -20,7 +20,8 @@ jobs:
           persist-credentials: false
       - name: Compile probe
         run: |
-          python3 -m py_compile experiments/oepl-s3-c6/probe.py experiments/oepl-s3-c6/log_triage.py
+          python3 -m py_compile experiments/oepl-s3-c6/probe.py experiments/oepl-s3-c6/log_triage.py \
+            experiments/oepl-s3-c6/wired_probe.py
       - name: Check safe shell entry points
         run: |
           bash -n experiments/oepl-s3-c6/run_on_ubuntu.sh
