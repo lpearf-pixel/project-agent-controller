@@ -94,6 +94,8 @@ lines = [
     f"- Configuration gate: **{inventory['status']}**",
     f"- S3 PlatformIO flags: `{inventory.get('s3', {}).get('flags', {})}`",
     f"- C6 IDF UART flags: `{inventory.get('c6', {}).get('flags', {})}`",
+    f"- C6 active hardware profile: `{inventory.get('c6', {}).get('profile') or 'unknown'}`",
+    f"- C6 pin source: `{inventory.get('c6', {}).get('source') or 'unknown'}`",
     f"- USB serial IDs present: {len(inventory.get('usb_serial_ids', []))}",
     f"- Build outcomes: {build or 'not requested'}",
     "- No flashing, resetting, GPIO changes, power wiring or tag commands performed.",
