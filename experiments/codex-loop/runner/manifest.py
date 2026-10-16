@@ -1,4 +1,5 @@
 """Strict, data-only GitHub task manifest validation."""
+
 from __future__ import annotations
 
 import json
@@ -36,25 +37,31 @@ class TaskManifest:
 
 
 def _safe_path(value: Any) -> str:
-    if (not isinstance(value, str) or not value or value.startswith("/")
-            or "\\" in value or "\x00" in value):
+    if (
+        not isinstance(value, str)
+        or not value
+        or value.startswith("/")
+        or "\\" in value
+        or "\x00" in value
+    ):
         raise ValueError("allowed path must be relative")
     path = PurePosixPath(value)
-    if (any(part in ("", ".", "..") for part in value.split("/"))
-            or path.as_posix() != value):
+    if any(part in ("", ".", "..") for part in value.split("/")) or path.as_posix() != value:
         raise ValueError("unsafe allowed path")
-    if any(
-        value == item or value.startswith(item + "/")
-        or item in path.parts
-        for item in BLOCKED
-    ):
+    if any(value == item or value.startswith(item + "/") or item in path.parts for item in BLOCKED):
         raise ValueError("protected path is not allowed")
     return value
 
 
-def parse_issue_body(body: str, *, issue_number: int, author: str,
-                     trusted_author: str, trusted_repo: str,
-                     trusted_issue: int) -> TaskManifest:
+def parse_issue_body(
+    body: str,
+    *,
+    issue_number: int,
+    author: str,
+    trusted_author: str,
+    trusted_repo: str,
+    trusted_issue: int,
+) -> TaskManifest:
     if issue_number != trusted_issue or author != trusted_author:
         raise ValueError("issue source is not trusted")
     match = MANIFEST_RE.search(body or "")
@@ -66,8 +73,17 @@ def parse_issue_body(body: str, *, issue_number: int, author: str,
         raise ValueError("invalid task manifest JSON") from exc
     if not isinstance(raw, dict):
         raise ValueError("task manifest must be an object")
-    required = {"taskId", "repo", "baseSha", "baseBranch", "allowedPaths",
-                "validators", "budget", "executionType", "prompt"}
+    required = {
+        "taskId",
+        "repo",
+        "baseSha",
+        "baseBranch",
+        "allowedPaths",
+        "validators",
+        "budget",
+        "executionType",
+        "prompt",
+    }
     if set(raw) != required:
         raise ValueError("manifest fields must exactly match the fixed schema")
     task_id = raw["taskId"]
@@ -97,10 +113,21 @@ def parse_issue_body(body: str, *, issue_number: int, author: str,
             raise ValueError("validator contains shell syntax")
         safe_validators.append(item)
     budget = raw["budget"]
-    if not isinstance(budget, dict) or set(budget) != {"codexGenerations", "repairs", "codexTimeoutSec", "ciApiCalls", "ciTimeoutSec"}:
+    if not isinstance(budget, dict) or set(budget) != {
+        "codexGenerations",
+        "repairs",
+        "codexTimeoutSec",
+        "ciApiCalls",
+        "ciTimeoutSec",
+    }:
         raise ValueError("invalid budget schema")
-    limits = {"codexGenerations": 1, "repairs": 1, "codexTimeoutSec": 1200,
-              "ciApiCalls": 36, "ciTimeoutSec": 300}
+    limits = {
+        "codexGenerations": 1,
+        "repairs": 1,
+        "codexTimeoutSec": 1200,
+        "ciApiCalls": 36,
+        "ciTimeoutSec": 300,
+    }
     safe_budget: dict[str, int] = {}
     for key, limit in limits.items():
         value = budget[key]
@@ -116,6 +143,16 @@ def parse_issue_body(body: str, *, issue_number: int, author: str,
     prompt = raw["prompt"]
     if not isinstance(prompt, str) or not (10 <= len(prompt) <= 40_000):
         raise ValueError("prompt length is invalid")
-    return TaskManifest(task_id, repo, base_sha, base_branch, safe_paths,
-                        tuple(safe_validators), safe_budget, raw["executionType"],
-                        prompt, issue_number, author)
+    return TaskManifest(
+        task_id,
+        repo,
+        base_sha,
+        base_branch,
+        safe_paths,
+        tuple(safe_validators),
+        safe_budget,
+        raw["executionType"],
+        prompt,
+        issue_number,
+        author,
+    )
