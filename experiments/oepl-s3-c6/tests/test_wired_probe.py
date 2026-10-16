@@ -107,10 +107,57 @@ class TTYTests(unittest.TestCase):
         with patch.object(
             wired_probe.http.client, "HTTPConnection", return_value=BadConn()
         ):
+            result = wired_probe.http_sysinfo("192.168.2.192", 80)
+            self.assertEqual(result["status"], "HTTP_INVALID_JSON")
+            self.assertEqual(result["code"], 200)
+            self.assertEqual(result["bytes"], len(b"broken json"))
+            self.assertNotIn("broken json", str(result))
+
+    def test_ap_http_non_200_carries_only_status_code(self):
+        class Reply:
+            status = 404
+
+        class Connection:
+            def request(self, *_args, **_kwargs):
+                pass
+
+            def getresponse(self):
+                return Reply()
+
+            def close(self):
+                pass
+
+        with patch.object(
+            wired_probe.http.client, "HTTPConnection", return_value=Connection()
+        ):
             self.assertEqual(
-                wired_probe.http_sysinfo("192.168.2.192", 80)["status"],
-                "HTTP_UNAVAILABLE",
+                wired_probe.http_sysinfo("192.168.2.192", 80),
+                {"status": "HTTP_NOT_AVAILABLE", "code": 404},
             )
+
+    def test_ap_http_timeout_and_disconnect_are_distinguished(self):
+        class Connection:
+            def __init__(self, error):
+                self.error = error
+
+            def request(self, *_args, **_kwargs):
+                raise self.error
+
+            def close(self):
+                pass
+
+        for error, expected in (
+            (TimeoutError("secret timeout"), "HTTP_TIMEOUT"),
+            (wired_probe.http.client.RemoteDisconnected("secret"), "HTTP_CONNECTION_CLOSED"),
+            (ConnectionRefusedError("secret"), "HTTP_TRANSPORT_ERROR"),
+        ):
+            with self.subTest(expected=expected):
+                with patch.object(
+                    wired_probe.http.client, "HTTPConnection", return_value=Connection(error)
+                ):
+                    outcome = wired_probe.http_sysinfo("192.168.2.192", 80)
+                self.assertEqual(outcome, {"status": expected})
+                self.assertNotIn("secret", str(outcome))
 
     def test_tcp_socket_never_implies_uart_success(self):
         class Socket:
