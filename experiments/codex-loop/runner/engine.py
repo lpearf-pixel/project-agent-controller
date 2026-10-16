@@ -1,4 +1,5 @@
 """One-task-at-a-time PAC runner engine."""
+
 from __future__ import annotations
 
 import hashlib
@@ -20,9 +21,17 @@ HERE = LOOP_ROOT
 
 
 class Runner:
-    def __init__(self, *, data: Path, repository: str, trusted_issue: int,
-                 trusted_author: str, codex_user: str = "pac-codex",
-                 publisher_user: str = "pac-publisher", repo_path: Path | None = None):
+    def __init__(
+        self,
+        *,
+        data: Path,
+        repository: str,
+        trusted_issue: int,
+        trusted_author: str,
+        codex_user: str = "pac-codex",
+        publisher_user: str = "pac-publisher",
+        repo_path: Path | None = None,
+    ):
         self.store = StateStore(data)
         self.repository = repository
         self.trusted_issue = trusted_issue
@@ -37,12 +46,22 @@ class Runner:
     def discover(self, client: GitHubClient) -> list[TaskManifest]:
         tasks = []
         for item in client.tasks():
-            author = ((item.get("author") or {}).get("login") if isinstance(item.get("author"), dict)
-                      else None)
+            author = (
+                (item.get("author") or {}).get("login")
+                if isinstance(item.get("author"), dict)
+                else None
+            )
             try:
-                tasks.append(parse_issue_body(item.get("body", ""), issue_number=int(item["number"]),
-                                              author=author or "", trusted_author=self.trusted_author,
-                                              trusted_repo=self.repository, trusted_issue=self.trusted_issue))
+                tasks.append(
+                    parse_issue_body(
+                        item.get("body", ""),
+                        issue_number=int(item["number"]),
+                        author=author or "",
+                        trusted_author=self.trusted_author,
+                        trusted_repo=self.repository,
+                        trusted_issue=self.trusted_issue,
+                    )
+                )
             except (KeyError, TypeError, ValueError):
                 continue
         return tasks
@@ -84,11 +103,23 @@ class Runner:
                 "reason": "task manifest changed after first discovery",
                 "task_id": manifest.task_id,
             }
-        if state["status"] in {"CI_PASS", "BLOCKED", "FAILED", "CI_FAIL", "TIMEOUT", "NEEDS_HARDWARE"}:
+        if state["status"] in {
+            "CI_PASS",
+            "BLOCKED",
+            "FAILED",
+            "CI_FAIL",
+            "TIMEOUT",
+            "NEEDS_HARDWARE",
+        }:
             return state
         if not execute:
-            return {"status": "DRY_RUN", "task_id": manifest.task_id, "repo": manifest.repo,
-                    "base_sha": manifest.base_sha, "validators": list(manifest.validators)}
+            return {
+                "status": "DRY_RUN",
+                "task_id": manifest.task_id,
+                "repo": manifest.repo,
+                "base_sha": manifest.base_sha,
+                "validators": list(manifest.validators),
+            }
         return self.execute(manifest, state)
 
     def execute(self, manifest: TaskManifest, state: dict) -> dict:
@@ -102,21 +133,35 @@ class Runner:
         if state["status"] == "CLAIMED":
             state = self.store.transition(task_id, "CODING", "starting bounded Codex generation")
             if not self.repo_path.is_dir():
-                return self.store.transition(task_id, "BLOCKED", "configured local checkout is missing")
+                return self.store.transition(
+                    task_id, "BLOCKED", "configured local checkout is missing"
+                )
             # Only validated, preapproved checks from manifest.py reach loop.py.
             # Without --check, the existing loop rejects every task.
             command = [
-                sys.executable, str(HERE / "loop.py"), "run",
-                "--repo", str(self.repo_path), "--task", str(prompt),
-                "--repairs", str(manifest.budget["repairs"]),
-                "--codex-timeout", str(manifest.budget["codexTimeoutSec"]),
+                sys.executable,
+                str(HERE / "loop.py"),
+                "run",
+                "--repo",
+                str(self.repo_path),
+                "--task",
+                str(prompt),
+                "--repairs",
+                str(manifest.budget["repairs"]),
+                "--codex-timeout",
+                str(manifest.budget["codexTimeoutSec"]),
             ]
             for validator in manifest.validators:
                 command.extend(["--check", validator])
             try:
-                result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE, timeout=manifest.budget["codexTimeoutSec"],
-                                        check=False)
+                result = subprocess.run(
+                    command,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=manifest.budget["codexTimeoutSec"],
+                    check=False,
+                )
             except subprocess.TimeoutExpired:
                 return self.store.transition(task_id, "TIMEOUT", "Codex process exceeded budget")
             if result.returncode not in (0, 1):
@@ -126,21 +171,35 @@ class Runner:
             except (ValueError, IndexError):
                 return self.store.transition(task_id, "FAILED", "Codex loop returned no state")
             if loop_state.get("status") == "BLOCKED":
-                return self.store.transition(task_id, "BLOCKED", "Codex loop reported a safety block")
+                return self.store.transition(
+                    task_id, "BLOCKED", "Codex loop reported a safety block"
+                )
             if loop_state.get("status") != "LOCAL_PASS":
-                return self.store.transition(task_id, "FAILED", "Codex loop did not reach LOCAL_PASS")
+                return self.store.transition(
+                    task_id, "FAILED", "Codex loop did not reach LOCAL_PASS"
+                )
             changed = set(loop_state.get("changed_files", []))
             if not changed or not changed.issubset(set(manifest.allowed_paths)):
-                return self.store.transition(task_id, "BLOCKED", "Codex changed a path outside the task manifest")
-            state = self.store.transition(task_id, "VALIDATING", "Codex produced a local candidate",
-                                          loop_task_id=loop_state.get("task_id"),
-                                          worktree=loop_state.get("worktree"),
-                                          changed_files=sorted(changed),
-                                          artifact_sha256=loop_state.get("artifact_sha256"))
+                return self.store.transition(
+                    task_id, "BLOCKED", "Codex changed a path outside the task manifest"
+                )
+            state = self.store.transition(
+                task_id,
+                "VALIDATING",
+                "Codex produced a local candidate",
+                loop_task_id=loop_state.get("task_id"),
+                worktree=loop_state.get("worktree"),
+                changed_files=sorted(changed),
+                artifact_sha256=loop_state.get("artifact_sha256"),
+            )
         if state["status"] == "VALIDATING":
             # Existing publisher performs the authoritative strict revalidation.
-            state = self.store.transition(task_id, "LOCAL_PASS", "saved Codex loop reported local validation",
-                                          artifact_sha256=state.get("artifact_sha256"))
+            state = self.store.transition(
+                task_id,
+                "LOCAL_PASS",
+                "saved Codex loop reported local validation",
+                artifact_sha256=state.get("artifact_sha256"),
+            )
         if state["status"] == "LOCAL_PASS":
             state = self.store.transition(task_id, "PUBLISHING", "ready for isolated Publisher")
             return self.publish(manifest, state)
@@ -153,7 +212,8 @@ class Runner:
         pac-publisher, and merely changing HOME is not a security boundary.
         """
         return self.store.transition(
-            manifest.task_id, "BLOCKED",
+            manifest.task_id,
+            "BLOCKED",
             "no verified cross-user publisher transport; cannot publish unattended",
         )
 
@@ -163,7 +223,9 @@ class Runner:
             sys.path.insert(0, str(LOOP_ROOT))
         from ci_check import classify_checks, classify_statuses
 
-        state = self.store.transition(manifest.task_id, "CI_CHECKING", "observing exact Draft PR head")
+        state = self.store.transition(
+            manifest.task_id, "CI_CHECKING", "observing exact Draft PR head"
+        )
         client = GitHubClient(manifest.repo, max_calls=manifest.budget["ciApiCalls"])
         deadline = time.monotonic() + manifest.budget["ciTimeoutSec"]
         interval = float(os.environ.get("PAC_CI_POLL_INTERVAL", "15"))
@@ -171,24 +233,39 @@ class Runner:
             pr = client.pr_view(state["pr_url"])
             sha = state.get("publish_commit")
             if pr.get("isDraft") is not True or pr.get("headRefOid") != sha:
-                return self.store.transition(manifest.task_id, "FAILED", "Draft PR head or draft flag changed")
-            checks = json.loads(client.call(["api", f"repos/{manifest.repo}/commits/{sha}/check-runs?per_page=100"]))
-            statuses = json.loads(client.call(["api", f"repos/{manifest.repo}/commits/{sha}/status?per_page=100"]))
+                return self.store.transition(
+                    manifest.task_id, "FAILED", "Draft PR head or draft flag changed"
+                )
+            checks = json.loads(
+                client.call(["api", f"repos/{manifest.repo}/commits/{sha}/check-runs?per_page=100"])
+            )
+            statuses = json.loads(
+                client.call(["api", f"repos/{manifest.repo}/commits/{sha}/status?per_page=100"])
+            )
             check_state, _ = classify_checks(checks, sha)
             status_state, _ = classify_statuses(statuses)
             if "FAIL" in (check_state, status_state):
-                return self.store.transition(manifest.task_id, "CI_FAIL", "GitHub CI reported failure")
+                return self.store.transition(
+                    manifest.task_id, "CI_FAIL", "GitHub CI reported failure"
+                )
             if check_state == "PASS" and status_state in ("PASS", "ABSENT"):
-                return self.store.transition(manifest.task_id, "CI_PASS", "exact head SHA CI passed")
+                return self.store.transition(
+                    manifest.task_id, "CI_PASS", "exact head SHA CI passed"
+                )
             if interval:
                 time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
         return self.store.transition(manifest.task_id, "TIMEOUT", "CI budget exhausted")
 
 
 def load_runner(data: Path) -> Runner:
-    return Runner(data=data, repository=os.environ.get("PAC_GITHUB_REPOSITORY", "lpearf-pixel/project-agent-controller"),
-                  trusted_issue=int(os.environ.get("PAC_TRUSTED_ISSUE", "7")),
-                  trusted_author=os.environ.get("PAC_TRUSTED_AUTHOR", "lpearf-pixel"),
-                  codex_user=os.environ.get("PAC_CODEX_USER", "pac-codex"),
-                  publisher_user=os.environ.get("PAC_PUBLISHER_USER", "pac-publisher"),
-                  repo_path=Path(os.environ.get("PAC_REPO_PATH", "")) if os.environ.get("PAC_REPO_PATH") else None)
+    return Runner(
+        data=data,
+        repository=os.environ.get("PAC_GITHUB_REPOSITORY", "lpearf-pixel/project-agent-controller"),
+        trusted_issue=int(os.environ.get("PAC_TRUSTED_ISSUE", "7")),
+        trusted_author=os.environ.get("PAC_TRUSTED_AUTHOR", "lpearf-pixel"),
+        codex_user=os.environ.get("PAC_CODEX_USER", "pac-codex"),
+        publisher_user=os.environ.get("PAC_PUBLISHER_USER", "pac-publisher"),
+        repo_path=Path(os.environ.get("PAC_REPO_PATH", ""))
+        if os.environ.get("PAC_REPO_PATH")
+        else None,
+    )
