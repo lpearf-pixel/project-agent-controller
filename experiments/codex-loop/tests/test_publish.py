@@ -1,10 +1,12 @@
 """Offline publisher integration tests; local bare Git remote and fake gh, no network."""
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -114,6 +116,22 @@ class PublishTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "artifacts differ"):
             self.execute(commit=True)
         self.assertEqual(self.state_file()["status"], "LOCAL_PASS")
+
+    def test_publish_receipt_contains_exact_immutable_sha(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(self.execute(commit=True), 0)
+        receipt = json.loads(out.getvalue())
+        committed = self.state_file()["publish_commit"]
+        self.assertEqual(receipt["status"], "PR_DRAFT")
+        self.assertEqual(receipt["publish_commit"], committed)
+        self.assertEqual(len(committed), 40)
+        self.assertEqual(receipt["pr_url"], self.state_file()["pr_url"])
+
+        repeated = io.StringIO()
+        with redirect_stdout(repeated):
+            self.assertEqual(self.execute(commit=True), 0)
+        self.assertEqual(json.loads(repeated.getvalue())["publish_commit"], committed)
 
     def test_explicit_publish_is_idempotent(self):
         self.assertEqual(self.execute(commit=True), 0)

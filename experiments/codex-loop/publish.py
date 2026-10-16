@@ -174,6 +174,7 @@ def run(args):
             print(json.dumps({
                 "task_id": args.task_id, "status": state["status"],
                 "branch": branch, "pr_url": state.get("pr_url"),
+                "publish_commit": state.get("publish_commit"),
             }, indent=2))
             return 0
         except (OSError, ValueError, RuntimeError) as exc:

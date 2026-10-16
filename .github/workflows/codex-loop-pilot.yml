@@ -45,3 +45,8 @@ jobs:
       - name: Run isolated fake-Codex test suite
         run: |
           python3 -m unittest discover -s experiments/codex-loop/tests -v
+      - name: Validate M4 Runner without Codex, USB or publishing
+        run: |
+          python3 -m compileall -q experiments/codex-loop/runner
+          bash -n experiments/codex-loop/runner/install-user.sh
+          python3 -m unittest discover -s experiments/codex-loop/runner/tests -v

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PAC autonomous task queue every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=pac-codex-runner.service
+
+[Install]
+WantedBy=timers.target

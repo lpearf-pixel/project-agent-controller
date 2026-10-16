@@ -1,0 +1,19 @@
+[Unit]
+Description=PAC Ubuntu autonomous task runner
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@ROOT@
+Environment=PYTHONPATH=@ROOT@/experiments/codex-loop/runner
+Environment=PAC_CODEX_LOOP_DATA=@DATA@
+ExecStart=/usr/bin/python3 @ROOT@/experiments/codex-loop/runner/cli.py run-once --execute
+TimeoutStartSec=1300
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@DATA@
+
+[Install]
+WantedBy=default.target
