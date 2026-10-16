@@ -99,6 +99,24 @@ class BuildGateTests(unittest.TestCase):
         self.assertIn("Build outcomes: not requested", summary)
         self.assertNotIn("'s3_build': 'PASS'", summary)
 
+    def test_post_build_uart_pin_change_blocks_success(self):
+        # A build may regenerate sdkconfig. New effective values must be audited.
+        self.make_tool(
+            "idf.py",
+            "#!/bin/sh\n"
+            "printf '%s\\n' CONFIG_OEPL_HARDWARE_UART_RX=8 "
+            "CONFIG_OEPL_HARDWARE_UART_TX=3 "
+            "> \"$OEPL_SOURCE/ARM_Tag_FW/OpenEPaperLink_esp32_C6_AP/sdkconfig\"\n"
+            "exit 0\n",
+        )
+        result = self.invoke("--build-only")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Post-build UART pin configuration was not verified", result.stderr)
+        inventory = json.loads(
+            (self.state_dir / "inventory.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(inventory["status"], "CONFIG_MISMATCH")
+
     def test_pin_mismatch_prevents_any_compilation(self):
         ini = self.source / "ESP32_AP-Flasher" / "platformio.ini"
         ini.write_text(
