@@ -8,6 +8,7 @@ SOURCE="${OEPL_SOURCE:-/home/parallels/OpenEPaperLink-git}"
 STATE_DIR="${PAC_CODEX_LOOP_DATA:-$HOME/.local/share/pac-codex-loop}/oepl-s3-c6"
 ISSUE="lpearf-pixel/project-agent-controller#7"
 MODE="${1:---inspect}"
+build_incomplete=0
 
 if [[ "$MODE" != "--inspect" && "$MODE" != "--build-only" ]]; then
   echo "Usage: bash experiments/oepl-s3-c6/run_on_ubuntu.sh [--inspect|--build-only]" >&2
@@ -57,6 +58,7 @@ if [[ "$MODE" == "--build-only" ]]; then
   echo "S3 build: $s3_build; C6 build: $c6_build"
   if [[ "$s3_build" != "PASS" || "$c6_build" != "PASS" ]]; then
     echo "Build gate incomplete; no firmware flashed." >&2
+    build_incomplete=1
   fi
 fi
 
@@ -65,15 +67,16 @@ fi
 # asynchronously without requesting terminal screenshots.
 if command -v gh >/dev/null 2>&1 && gh auth status -h github.com >/dev/null 2>&1; then
   summary="$STATE_DIR/github-summary.md"
-  python3 - "$report" "$STATE_DIR/build-summary.json" "$summary" <<'PY'
+  python3 - "$report" "$STATE_DIR/build-summary.json" "$summary" "$MODE" <<'PY'
 import json
 import pathlib
 import sys
 
 inventory = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 build_path = pathlib.Path(sys.argv[2])
+# An inspection is not a build: never imply a stale prior build was performed.
 build = (json.loads(build_path.read_text(encoding="utf-8"))
-         if build_path.is_file() else None)
+         if sys.argv[4] == "--build-only" and build_path.is_file() else None)
 lines = [
     "Automated **non-flashing** OEPL S3/C6 probe:",
     "",
@@ -102,3 +105,6 @@ PY
 fi
 echo "Evidence: $STATE_DIR"
 echo "Hardware gate: only owner physically wires S3/C6. No software can verify disconnected pins."
+if [[ "$build_incomplete" -ne 0 ]]; then
+  exit 1
+fi
