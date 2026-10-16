@@ -7,6 +7,8 @@ and reset some boards. Never flashes, writes GPIO, or changes tty settings.
 from __future__ import annotations
 
 import argparse
+import http.client
+import ipaddress
 import json
 import socket
 import sys
@@ -29,6 +31,58 @@ def tcp_probe(ip: str | None, port: int, timeout: float = 2.0) -> dict:
             return {"status": "TCP_REACHABLE"}
     except OSError:
         return {"status": "TCP_UNREACHABLE"}
+
+
+def http_sysinfo(ip: str | None, port: int, timeout: float = 3.0) -> dict:
+    """GET only /sysinfo on local AP; sanitize to a tiny known field allowlist.
+
+    Neither AP network availability nor cached apInfo values prove a live UART
+    handshake. No POST, reset, firmware change, tag command, serial open.
+    """
+    if not ip:
+        return {"status": "NOT_REQUESTED"}
+    try:
+        address = ipaddress.IPv4Address(ip)
+        if not address.is_private or address.is_unspecified:
+            return {"status": "INVALID_TARGET"}
+        if not 1 <= port <= 65535:
+            return {"status": "INVALID_TARGET"}
+    except ipaddress.AddressValueError:
+        return {"status": "INVALID_TARGET"}
+    conn = http.client.HTTPConnection(str(address), port, timeout=timeout)
+    try:
+        conn.request("GET", "/sysinfo", headers={"Accept": "application/json"})
+        response = conn.getresponse()
+        if response.status != 200:
+            return {"status": "HTTP_NOT_AVAILABLE", "code": response.status}
+        raw = response.read(16_385)
+        if len(raw) > 16_384:
+            return {"status": "RESPONSE_TOO_LARGE"}
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return {"status": "INVALID_RESPONSE"}
+        allowed = ("env", "ap_version", "ap_type", "ap_typename", "channel", "hasC6")
+        details = {
+            key: value for key in allowed
+            if (value := data.get(key)) is not None
+            and isinstance(value, (str, int, bool))
+            and len(str(value)) <= 100
+        }
+        pins = data.get("flashpin_defaults")
+        if isinstance(pins, dict):
+            details["flashpin_defaults"] = {
+                key: pins[key] for key in ("txd", "rxd", "reset")
+                if key in pins and type(pins[key]) is int
+            }
+        return {
+            "status": "HTTP_INFO_OBSERVED",
+            "fields": details,
+            "interpretation": "AP-reported state only; not proof of live UART or flashed C6 identity",
+        }
+    except (OSError, ValueError, http.client.HTTPException):
+        return {"status": "HTTP_UNAVAILABLE"}
+    finally:
+        conn.close()
 
 
 def tty_inventory(root: Path = Path("/dev/serial/by-id")) -> list[dict]:
@@ -64,6 +118,7 @@ def snapshot(source: Path, ip: str | None, port: int = 80,
         "c6_pin_source": inventory.get("c6", {}).get("source"),
         "usb_serial_ports": devices,
         "tcp": net,
+        "ap_sysinfo": http_sysinfo(ip, port),
         "uart_handshake": "NOT_TESTED",
         "c6_radio": "NOT_TESTED",
         "conclusion": (
