@@ -51,10 +51,22 @@ def s3_config(root):
     if matched is None:
         return {"status": "UNKNOWN", "reason": "expected S3 env absent", "flags": {}}
     values = {}
+    duplicate = False
     for name in S3_FLAGS:
-        found = re.search(r"(?m)^\s*-D\s+" + re.escape(name) + r"\s*=\s*([^\s;]+)", matched)
-        values[name] = found.group(1) if found else None
-    status = "PASS" if all(values[k] == v for k, v in S3_FLAGS.items()) else "MISMATCH"
+        matches = re.findall(
+            r"(?m)^\\s*-D\\s+" + re.escape(name) + r"\\s*=\\s*([^\\s;]+)",
+            matched,
+        )
+        duplicate |= len(matches) > 1
+        values[name] = matches[0] if len(matches) == 1 else None
+    if duplicate:
+        status = "MISMATCH"
+    elif any(value is None for value in values.values()):
+        status = "UNKNOWN"
+    elif all(values[k] == v for k, v in S3_FLAGS.items()):
+        status = "PASS"
+    else:
+        status = "MISMATCH"
     return {"status": status, "flags": values}
 
 
