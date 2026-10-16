@@ -105,6 +105,36 @@ def http_sysinfo(ip: str | None, port: int, timeout: float = 3.0) -> dict:
         conn.close()
 
 
+def http_root_status(ip: str | None, port: int, timeout: float = 3.0) -> dict:
+    """GET /, inspect response status only; never read body or retain headers."""
+    if not ip:
+        return {"status": "NOT_REQUESTED"}
+    try:
+        address = ipaddress.IPv4Address(ip)
+        if not address.is_private or address.is_unspecified or not 1 <= port <= 65535:
+            return {"status": "INVALID_TARGET"}
+    except ipaddress.AddressValueError:
+        return {"status": "INVALID_TARGET"}
+    conn = http.client.HTTPConnection(str(address), port, timeout=timeout)
+    phase = "REQUEST"
+    try:
+        conn.request("GET", "/", headers={"Connection": "close"})
+        phase = "HEADERS"
+        reply = conn.getresponse()
+        return {"status": "HTTP_STATUS_OBSERVED", "code": reply.status}
+    except TimeoutError:
+        return {"status": "HTTP_TIMEOUT", "phase": phase}
+    except (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError):
+        return {"status": "HTTP_CONNECTION_CLOSED", "phase": phase}
+    except http.client.HTTPException:
+        return {"status": "HTTP_PROTOCOL_ERROR", "phase": phase}
+    except OSError:
+        return {"status": "HTTP_TRANSPORT_ERROR", "phase": phase}
+    finally:
+        conn.close()
+
+
+
 def tty_inventory(root: Path = Path("/dev/serial/by-id")) -> list[dict]:
     if not root.is_dir():
         return []
@@ -138,6 +168,7 @@ def snapshot(source: Path, ip: str | None, port: int = 80,
         "c6_pin_source": inventory.get("c6", {}).get("source"),
         "usb_serial_ports": devices,
         "tcp": net,
+        "ap_root": http_root_status(ip, port),
         "ap_sysinfo": http_sysinfo(ip, port),
         "uart_handshake": "NOT_TESTED",
         "c6_radio": "NOT_TESTED",
