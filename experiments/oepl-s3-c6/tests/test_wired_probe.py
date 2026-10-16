@@ -38,6 +38,80 @@ class TTYTests(unittest.TestCase):
             self.assertEqual(state["c6_radio"], "NOT_TESTED")
             self.assertEqual(state["tcp"]["status"], "NOT_REQUESTED")
 
+    def test_ap_sysinfo_read_only_exposes_radio_fields_not_secrets(self):
+        import json
+
+        class Reply:
+            status = 200
+
+            def read(self, _):
+                return json.dumps({
+                    "env": "ESP32_S3_C6_BIG_AP",
+                    "ap_version": 33,
+                    "ap_type": 198,
+                    "hasC6": 1,
+                    "flashpin_defaults": {"txd": 13, "rxd": 14, "reset": 47},
+                    "alias": "private-room",
+                    "ntpserver": "private.example.invalid",
+                }).encode()
+
+        class Connection:
+            called = None
+
+            def request(self, method, path, headers):
+                self.called = (method, path, headers)
+
+            def getresponse(self):
+                return Reply()
+
+            def close(self):
+                pass
+
+        conn = Connection()
+        with patch.object(
+            wired_probe.http.client, "HTTPConnection", return_value=conn
+        ):
+            result = wired_probe.http_sysinfo("192.168.2.192", 80)
+        self.assertEqual(result["status"], "HTTP_INFO_OBSERVED")
+        self.assertEqual(result["fields"]["ap_version"], 33)
+        self.assertEqual(result["fields"]["flashpin_defaults"]["txd"], 13)
+        self.assertEqual(conn.called[0:2], ("GET", "/sysinfo"))
+        self.assertNotIn("private-room", str(result))
+        self.assertNotIn("private.example.invalid", str(result))
+        self.assertNotIn("UART_PASS", str(result))
+
+    def test_ap_info_refuses_public_targets_and_bad_json(self):
+        self.assertEqual(
+            wired_probe.http_sysinfo("8.8.8.8", 80)["status"], "INVALID_TARGET"
+        )
+        self.assertEqual(
+            wired_probe.http_sysinfo(None, 80)["status"], "NOT_REQUESTED"
+        )
+
+        class BadReply:
+            status = 200
+
+            def read(self, _):
+                return b"broken json"
+
+        class BadConn:
+            def request(self, *_args, **_kwargs):
+                pass
+
+            def getresponse(self):
+                return BadReply()
+
+            def close(self):
+                pass
+
+        with patch.object(
+            wired_probe.http.client, "HTTPConnection", return_value=BadConn()
+        ):
+            self.assertEqual(
+                wired_probe.http_sysinfo("192.168.2.192", 80)["status"],
+                "HTTP_UNAVAILABLE",
+            )
+
     def test_tcp_socket_never_implies_uart_success(self):
         class Socket:
             def __enter__(self):
