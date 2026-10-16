@@ -59,31 +59,33 @@ def s3_config(root):
 
 
 def c6_config(root):
+    """Only active sdkconfig can validate C6 UART settings; defaults are templates."""
     directory = root / "ARM_Tag_FW" / "OpenEPaperLink_esp32_C6_AP"
     if not directory.is_dir():
         return {"status": "UNKNOWN", "reason": "C6 IDF source absent", "flags": {}}
-    files = sorted(directory.glob("sdkconfig*"))
-    # sdkconfig may not exist in a fresh checkout; never create it.
-    found_values = {}
-    sources = []
-    for file in files:
-        if not file.is_file() or file.stat().st_size > 2_000_000:
-            continue
-        body = file.read_text(encoding="utf-8", errors="replace")
-        matched = {}
-        for name in C6_FLAGS:
-            m = re.search(r"(?m)^" + re.escape(name) + r"=(\d+)\s*$", body)
-            if m:
-                matched[name] = m.group(1)
-        if matched:
-            found_values.update(matched)
-            sources.append(file.name)
-    status = (
-        "UNKNOWN" if len(found_values) < len(C6_FLAGS)
-        else "PASS" if all(found_values[k] == v for k, v in C6_FLAGS.items())
-        else "MISMATCH"
-    )
-    return {"status": status, "flags": found_values, "config_files": sources}
+    active = directory / "sdkconfig"
+    if not active.is_file():
+        return {"status": "UNKNOWN", "reason": "active C6 sdkconfig absent",
+                "flags": {}, "config_files": []}
+    if active.stat().st_size > 2_000_000:
+        return {"status": "UNKNOWN", "reason": "active C6 sdkconfig too large",
+                "flags": {}, "config_files": []}
+    body = active.read_text(encoding="utf-8", errors="replace")
+    values = {}
+    duplicate = False
+    for name in C6_FLAGS:
+        matches = re.findall(r"(?m)^" + re.escape(name) + r"=(\\d+)\\s*$", body)
+        duplicate |= len(matches) > 1
+        values[name] = matches[0] if len(matches) == 1 else None
+    if duplicate:
+        status = "MISMATCH"
+    elif any(value is None for value in values.values()):
+        status = "UNKNOWN"
+    elif all(values[k] == v for k, v in C6_FLAGS.items()):
+        status = "PASS"
+    else:
+        status = "MISMATCH"
+    return {"status": status, "flags": values, "config_files": ["sdkconfig"]}
 
 
 def usb_ports():
