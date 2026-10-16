@@ -23,6 +23,7 @@ def git(root, *args, check=True):
     p = subprocess.run(
         ["git", "-C", str(root), *args],
         capture_output=True, check=False, timeout=30,
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
     )
     if check and p.returncode:
         raise RuntimeError(
