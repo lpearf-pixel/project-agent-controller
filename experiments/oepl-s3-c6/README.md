@@ -93,6 +93,21 @@ To disable periodic monitoring:
 systemctl --user disable --now pac-oepl-s3-c6.timer
 ```
 
+## Offline log triage (no serial access, no secrets)
+
+The tested `log_triage.py` parser separately counts S3 UART task startup,
+radio ping failures, explicit ACK lines, Wi-Fi connectivity and database
+load failures. It does **not** infer a broken wire from `ping failed`
+or claim a live UART link from a copied log.
+
+```bash
+python3 experiments/oepl-s3-c6/log_triage.py --log /path/to/existing-s3.log
+```
+
+The output is a bounded symptom summary with no raw SSID/password lines.
+The source log remains on Ubuntu; any future hosted status report should
+share **only the summary**. No flashing or GPIO access is performed.
+
 ## Deterministic milestones
 
 - S0 (current): source SHA inventory, UART pin configuration audit, USB
