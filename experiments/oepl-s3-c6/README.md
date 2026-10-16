@@ -108,6 +108,41 @@ The output is a bounded symptom summary with no raw SSID/password lines.
 The source log remains on Ubuntu; any future hosted status report should
 share **only the summary**. No flashing or GPIO access is performed.
 
+## Owner reports the three wires are connected — read-only Ubuntu check
+
+Use an **ext4 Git checkout**, not the old Parallels shared path. A one-time
+local invocation from Ubuntu reads configured firmware pin definitions,
+lists USB serial symlinks and optionally probes the previously seen AP
+address on TCP port 80. It **does not open serial TTYs**, change DTR/RTS,
+reset either board, flash chips, modify GPIO, or transmit a radio command.
+
+```bash
+# From Ubuntu's own user account, one-time clone if not already present:
+gh repo clone lpearf-pixel/project-agent-controller \
+  "$HOME/oepl-s3-c6-stage" -- \
+  --branch feat/oepl-s3-c6-pilot-20261016
+cd "$HOME/oepl-s3-c6-stage"
+python3 experiments/oepl-s3-c6/wired_probe.py \
+  --source /home/parallels/OpenEPaperLink-git --ap-ip 192.168.2.192
+bash experiments/oepl-s3-c6/run_on_ubuntu.sh --inspect
+```
+
+For an existing clean checkout, use `git pull --ff-only` rather than
+recloning or deleting anything. `192.168.2.192` is **historical**; a
+failed TCP probe may simply mean the AP changed address. The second command
+publishes only sanitized config status, GPIO pin values, and the count of
+USB serial entries to Issue #7 if GitHub CLI is authenticated; it never
+publishes a private serial transcript.
+
+`READY_FOR_HARDWARE_CHECK` means firmware configuration can be reviewed,
+**not** that USB, UART, C6 radio, RF or actual wire continuity passed.
+`TCP_REACHABLE` means only the historical S3 network endpoint accepts
+connections. Real UART success needs a *fresh* serial log showing an
+explicit C6 response on the correct serial device; opening CDC/USB JTAG
+serial can alter DTR/RTS on some boards, so the default check deliberately
+does not open ports. Any active serial capture is a separate operator-visible
+step, never a side effect of the preflight.
+
 ## Deterministic milestones
 
 - S0 (current): source SHA inventory, UART pin configuration audit, USB
