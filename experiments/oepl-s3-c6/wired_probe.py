@@ -57,10 +57,14 @@ def http_sysinfo(ip: str | None, port: int, timeout: float = 3.0) -> dict:
             return {"status": "HTTP_NOT_AVAILABLE", "code": response.status}
         raw = response.read(16_385)
         if len(raw) > 16_384:
-            return {"status": "RESPONSE_TOO_LARGE"}
-        data = json.loads(raw)
+            return {"status": "RESPONSE_TOO_LARGE", "code": 200}
+        try:
+            data = json.loads(raw)
+        except (ValueError, UnicodeError):
+            # Never expose the body, headers, Wi-Fi SSID, cookies, or alias.
+            return {"status": "HTTP_INVALID_JSON", "code": 200, "bytes": len(raw)}
         if not isinstance(data, dict):
-            return {"status": "INVALID_RESPONSE"}
+            return {"status": "HTTP_INVALID_RESPONSE", "code": 200}
         allowed = ("env", "ap_version", "ap_type", "ap_typename", "channel", "hasC6")
         details = {
             key: value for key in allowed
@@ -79,8 +83,16 @@ def http_sysinfo(ip: str | None, port: int, timeout: float = 3.0) -> dict:
             "fields": details,
             "interpretation": "AP-reported state only; not proof of live UART or flashed C6 identity",
         }
-    except (OSError, ValueError, http.client.HTTPException):
-        return {"status": "HTTP_UNAVAILABLE"}
+    except (TimeoutError, socket.timeout):
+        return {"status": "HTTP_TIMEOUT"}
+    except (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError):
+        return {"status": "HTTP_CONNECTION_CLOSED"}
+    except http.client.IncompleteRead:
+        return {"status": "HTTP_INCOMPLETE_RESPONSE"}
+    except http.client.HTTPException:
+        return {"status": "HTTP_PROTOCOL_ERROR"}
+    except OSError:
+        return {"status": "HTTP_TRANSPORT_ERROR"}
     finally:
         conn.close()
 
