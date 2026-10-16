@@ -72,12 +72,20 @@ if [[ "$MODE" == "--build-only" ]]; then
   fi
 fi
 
+# Optional local AP GET; caller chooses IP and no serial/GPIO is touched.
+wired="$STATE_DIR/wired-preflight.json"
+rm -f "$wired"
+if [[ -n "${OEPL_AP_IP:-}" ]]; then
+  python3 "$PAC_ROOT/experiments/oepl-s3-c6/wired_probe.py" \
+    --source "$SOURCE" --ap-ip "$OEPL_AP_IP" >"$wired"
+fi
+
 # Share ONLY sanitized metadata, never USB serial transcripts or Wi-Fi passwords.
 # A one-time change-sensitive issue report lets the PAC reviewer progress
 # asynchronously without requesting terminal screenshots.
 if command -v gh >/dev/null 2>&1 && gh auth status -h github.com >/dev/null 2>&1; then
   summary="$STATE_DIR/github-summary.md"
-  python3 - "$report" "$STATE_DIR/build-summary.json" "$summary" "$MODE" <<'PY'
+  python3 - "$report" "$STATE_DIR/build-summary.json" "$summary" "$MODE" "$wired" <<'PY'
 import json
 import pathlib
 import sys
@@ -100,6 +108,20 @@ lines = [
     f"- Build outcomes: {build or 'not requested'}",
     "- No flashing, resetting, GPIO changes, power wiring or tag commands performed.",
 ]
+wired_path = pathlib.Path(sys.argv[5])
+if wired_path.is_file():
+    wired_data = json.loads(wired_path.read_text(encoding="utf-8"))
+    ap = wired_data.get("ap_sysinfo", {})
+    metadata = ap.get("fields", {}) if isinstance(ap.get("fields"), dict) else {}
+    lines.append(f"- AP read-only HTTP status: `{ap.get('status', 'UNKNOWN')}`")
+    lines.append(f"- AP HTTP phase: `{ap.get('phase', 'none')}`")
+    if type(ap.get("code")) is int:
+        lines.append(f"- AP HTTP response code: `{ap['code']}`")
+    for key in ("ap_version", "ap_type"):
+        value = metadata.get(key)
+        if type(value) is int:
+            lines.append(f"- AP-reported {key}: `{value}`")
+    lines.append("- UART/RF handshake is NOT_TESTED; API metadata is not wire proof.")
 pathlib.Path(sys.argv[3]).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
   fingerprint="$(sha256sum "$summary" | awk '{print $1}')"
