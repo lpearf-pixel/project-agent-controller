@@ -71,33 +71,84 @@ def s3_config(root):
 
 
 def c6_config(root):
-    """Only active sdkconfig can validate C6 UART settings; defaults are templates."""
+    """Resolve *effective source* C6 UART pins from active profile + header.
+
+    Kconfig only writes GPIO pin integers for CUSTOM and 4inch profiles.
+    Default/Lilygo/PoE/Elecrow firmware pins are defined by second_uart.h.
+    Inspect both sources, never mistake a missing numeric key for a bad pin.
+    This is a *source* audit, not installed firmware identity verification.
+    """
     directory = root / "ARM_Tag_FW" / "OpenEPaperLink_esp32_C6_AP"
-    if not directory.is_dir():
-        return {"status": "UNKNOWN", "reason": "C6 IDF source absent", "flags": {}}
     active = directory / "sdkconfig"
-    if not active.is_file():
-        return {"status": "UNKNOWN", "reason": "active C6 sdkconfig absent",
-                "flags": {}, "config_files": []}
+    header = directory / "main" / "second_uart.h"
+    base = {"flags": {}, "config_files": [], "profile": None}
+    if not directory.is_dir() or not active.is_file():
+        return {**base, "status": "UNKNOWN", "reason": "active C6 sdkconfig absent"}
     if active.stat().st_size > 2_000_000:
-        return {"status": "UNKNOWN", "reason": "active C6 sdkconfig too large",
-                "flags": {}, "config_files": []}
+        return {**base, "status": "UNKNOWN", "reason": "active sdkconfig too large"}
+
     body = active.read_text(encoding="utf-8", errors="replace")
-    values = {}
-    duplicate = False
+    selected = re.findall(
+        r"(?m)^CONFIG_OEPL_HARDWARE_PROFILE_([A-Za-z0-9_]+)=y[ \t]*$", body
+    )
+    base["config_files"] = ["sdkconfig"]
+    if len(selected) != 1:
+        status = "UNKNOWN" if not selected else "MISMATCH"
+        return {**base, "status": status, "reason": "hardware profile not unique"}
+
+    profile = selected[0]
+    base["profile"] = profile
+    supported = {"DEFAULT", "LILYGO", "POE_AP", "ELECROW_C6", "CUSTOM", "4inch"}
+    if profile not in supported:
+        return {**base, "status": "UNKNOWN", "reason": "unsupported hardware profile"}
+
+    # Explicit ints may be omitted entirely for the DEFAULT profile.
+    configured = {}
     for name in C6_FLAGS:
-        matches = re.findall(r"(?m)^" + re.escape(name) + r"=(\d+)\s*$", body)
-        duplicate |= len(matches) > 1
-        values[name] = matches[0] if len(matches) == 1 else None
-    if duplicate:
-        status = "MISMATCH"
-    elif any(value is None for value in values.values()):
+        matches = re.findall(r"(?m)^" + re.escape(name) + r"=([0-9]+)[ \t]*$", body)
+        occurrences = re.findall(r"(?m)^" + re.escape(name) + r"=", body)
+        if len(occurrences) > 1:
+            return {**base, "status": "MISMATCH", "reason": "duplicate UART key"}
+        configured[name] = matches[0] if len(matches) == 1 else None
+
+    if profile in {"CUSTOM", "4inch"}:
+        values = configured
+        source = "sdkconfig"
+    else:
+        if not header.is_file() or header.stat().st_size > 200_000:
+            return {**base, "status": "UNKNOWN", "reason": "C6 UART header absent"}
+        h = header.read_text(encoding="utf-8", errors="replace")
+        symbol = "CONFIG_OEPL_HARDWARE_PROFILE_" + profile
+        block = re.search(
+            r"(?ms)^[ \t]*#(?:if|elif)[ \t]+defined\("
+            + re.escape(symbol)
+            + r"\)(.*?)(?=^[ \t]*#(?:elif|else|endif)\b)",
+            h,
+        )
+        if block is None:
+            return {**base, "status": "UNKNOWN", "reason": "profile pins absent from header"}
+        values = {}
+        for name in C6_FLAGS:
+            matches = re.findall(
+                r"(?m)^[ \t]*#define[ \t]+" + re.escape(name) + r"[ \t]+([0-9]+)[ \t]*$",
+                block.group(1),
+            )
+            values[name] = matches[0] if len(matches) == 1 else None
+        source = "second_uart.h"
+        # If a profile somehow has numeric config too, a conflicting value is unsafe.
+        if any(configured[k] is not None and configured[k] != values[k] for k in C6_FLAGS):
+            return {
+                **base, "status": "MISMATCH", "flags": values,
+                "reason": "sdkconfig and header disagree", "source": source,
+            }
+
+    if any(value is None for value in values.values()):
         status = "UNKNOWN"
-    elif all(values[k] == v for k, v in C6_FLAGS.items()):
+    elif all(values[k] == expected for k, expected in C6_FLAGS.items()):
         status = "PASS"
     else:
         status = "MISMATCH"
-    return {"status": status, "flags": values, "config_files": ["sdkconfig"]}
+    return {**base, "status": status, "flags": values, "source": source}
 
 
 def usb_ports():
