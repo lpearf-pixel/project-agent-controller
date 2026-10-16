@@ -184,6 +184,56 @@ class TTYTests(unittest.TestCase):
                 self.assertEqual(outcome, {"status": expected, "phase": "REQUEST"})
                 self.assertNotIn("secret", str(outcome))
 
+    def test_root_get_reports_code_without_reading_page_or_headers(self):
+        class Reply:
+            status = 200
+
+            def read(self, _):
+                raise AssertionError("must never read root page")
+
+        class Connection:
+            called = None
+
+            def request(self, method, path, headers):
+                self.called = (method, path, headers)
+
+            def getresponse(self):
+                return Reply()
+
+            def close(self):
+                pass
+
+        conn = Connection()
+        with patch.object(
+            wired_probe.http.client, "HTTPConnection", return_value=conn
+        ):
+            result = wired_probe.http_root_status("192.168.2.192", 80)
+        self.assertEqual(result, {"status": "HTTP_STATUS_OBSERVED", "code": 200})
+        self.assertEqual(conn.called[0:2], ("GET", "/"))
+        self.assertEqual(conn.called[2], {"Connection": "close"})
+
+    def test_root_get_differentiates_header_timeout(self):
+        class Connection:
+            def request(self, *_args, **_kwargs):
+                pass
+
+            def getresponse(self):
+                raise TimeoutError("private content")
+
+            def close(self):
+                pass
+
+        with patch.object(
+            wired_probe.http.client, "HTTPConnection", return_value=Connection()
+        ):
+            result = wired_probe.http_root_status("192.168.2.192", 80)
+        self.assertEqual(result, {"status": "HTTP_TIMEOUT", "phase": "HEADERS"})
+        self.assertNotIn("private", str(result))
+        self.assertEqual(
+            wired_probe.http_root_status("8.8.8.8", 80)["status"],
+            "INVALID_TARGET",
+        )
+
     def test_tcp_socket_never_implies_uart_success(self):
         class Socket:
             def __enter__(self):
