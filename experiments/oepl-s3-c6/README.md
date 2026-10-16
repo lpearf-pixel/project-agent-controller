@@ -34,6 +34,18 @@ References:
 - https://github.com/OpenEPaperLink/OpenEPaperLink/blob/master/ESP32_AP-Flasher/platformio.ini
 - https://github.com/hillstub/OpenEPaperLink-Minimal-Spaghetti-AP
 
+**Source-based C6 profile resolution:** In the exact OEPL source revision
+`85f92f3839da2c5a7adb4be95c31f9a3fc1cd2ed`, the `DEFAULT`
+ESP-IDF Kconfig profile defines C6 protocol UART TX=GPIO3/RX=GPIO2
+in `main/second_uart.h`. Numeric `CONFIG_OEPL_HARDWARE_UART_*`
+entries are only produced for profiles such as `CUSTOM` or `4inch`;
+their absence from `sdkconfig` is **not** a UART failure.
+The probe now resolves the unique active profile, then reads either the
+selected compile-time header branch or explicit numeric settings.
+Unknown, duplicated, unsupported, or wiring-incompatible profiles block
+the source gate. An offline source gate cannot prove that the **flashed
+firmware** has identical bits or that the physical UART is communicating.
+
 The prior symptom `ping failed` occurred after S3 Wi-Fi connection and
 does **not** by itself prove an UART mismatch, physical wire fault or RF
 failure. Prior `tagDB.json InvalidInput` does not justify clearing the
