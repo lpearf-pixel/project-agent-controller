@@ -30,8 +30,16 @@ class BuildGateTests(unittest.TestCase):
         c6 = self.source / "ARM_Tag_FW" / "OpenEPaperLink_esp32_C6_AP"
         c6.mkdir(parents=True)
         (c6 / "sdkconfig").write_text(
-            "CONFIG_OEPL_HARDWARE_UART_RX=2\n"
-            "CONFIG_OEPL_HARDWARE_UART_TX=3\n",
+            "CONFIG_OEPL_HARDWARE_PROFILE_DEFAULT=y\n",
+            encoding="utf-8",
+        )
+        header = c6 / "main" / "second_uart.h"
+        header.parent.mkdir(parents=True)
+        header.write_text(
+            "#if defined(CONFIG_OEPL_HARDWARE_PROFILE_DEFAULT)\n"
+            " #define CONFIG_OEPL_HARDWARE_UART_TX 3\n"
+            " #define CONFIG_OEPL_HARDWARE_UART_RX 2\n"
+            "#endif\n",
             encoding="utf-8",
         )
         self.fake = self.home / "fake-bin"
@@ -104,7 +112,8 @@ class BuildGateTests(unittest.TestCase):
         self.make_tool(
             "idf.py",
             "#!/bin/sh\n"
-            "printf '%s\\n' CONFIG_OEPL_HARDWARE_UART_RX=8 "
+            "printf '%s\\n' CONFIG_OEPL_HARDWARE_PROFILE_CUSTOM=y "
+            "CONFIG_OEPL_HARDWARE_UART_RX=8 "
             "CONFIG_OEPL_HARDWARE_UART_TX=3 "
             "> \"$OEPL_SOURCE/ARM_Tag_FW/OpenEPaperLink_esp32_C6_AP/sdkconfig\"\n"
             "exit 0\n",
