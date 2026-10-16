@@ -32,7 +32,13 @@ def check(*, codex_user: str, publisher_user: str, runner_user: str | None = Non
                  or key.upper() in {"GH_TOKEN", "GITHUB_TOKEN"}}
     if inherited:
         errors.append("credential-like environment inherited: " + ",".join(sorted(inherited)))
-    return not errors, errors
+    # Existence of two passwd entries does NOT demonstrate effective identity,
+    # filesystem ACL isolation, credential separation or a safe publisher IPC.
+    # Block unattended execution until separately proven by an OS-level broker.
+    errors.append(
+        "isolated Codex executor and Publisher IPC are not implemented/verified"
+    )
+    return False, errors
 
 
 def codex_environment(codex_home: Path) -> dict[str, str]:
