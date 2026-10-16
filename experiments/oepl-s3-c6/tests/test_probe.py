@@ -27,6 +27,21 @@ class OEPLProbeTests(unittest.TestCase):
             "[env:OTHER_AP]\n-D FLASHER_AP_TXD=2\n",
             encoding="utf-8",
         )
+        self.header = self.c6 / "main" / "second_uart.h"
+        self.header.parent.mkdir(parents=True)
+        self.header.write_text(
+            "#if defined(CONFIG_OEPL_HARDWARE_PROFILE_DEFAULT)\n"
+            " #define CONFIG_OEPL_HARDWARE_UART_TX 3\n"
+            " #define CONFIG_OEPL_HARDWARE_UART_RX 2\n"
+            "#elif defined(CONFIG_OEPL_HARDWARE_PROFILE_LILYGO)\n"
+            " #define CONFIG_OEPL_HARDWARE_UART_TX 24\n"
+            " #define CONFIG_OEPL_HARDWARE_UART_RX 23\n"
+            "#elif defined(CONFIG_OEPL_HARDWARE_PROFILE_POE_AP)\n"
+            " #define CONFIG_OEPL_HARDWARE_UART_TX 5\n"
+            " #define CONFIG_OEPL_HARDWARE_UART_RX 18\n"
+            "#endif\n",
+            encoding="utf-8",
+        )
         self.sdk_defaults = self.c6 / "sdkconfig.defaults"
         self.sdk_active = self.c6 / "sdkconfig"
         self.sdk_defaults.write_text(
@@ -34,8 +49,7 @@ class OEPLProbeTests(unittest.TestCase):
             "CONFIG_OEPL_HARDWARE_UART_TX=3\n", encoding="utf-8",
         )
         self.sdk_active.write_text(
-            "CONFIG_OEPL_HARDWARE_UART_RX=2\n"
-            "CONFIG_OEPL_HARDWARE_UART_TX=3\n"
+            "CONFIG_OEPL_HARDWARE_PROFILE_DEFAULT=y\n"
             "CONFIG_WIFI_PASSWORD=\"secret-never-print\"\n", encoding="utf-8",
         )
 
@@ -90,6 +104,7 @@ class OEPLProbeTests(unittest.TestCase):
 
     def test_active_settings_override_defaults_and_fail_mismatch(self):
         self.sdk_active.write_text(
+            "CONFIG_OEPL_HARDWARE_PROFILE_CUSTOM=y\n"
             "CONFIG_OEPL_HARDWARE_UART_RX=9\n"
             "CONFIG_OEPL_HARDWARE_UART_TX=3\n",
             encoding="utf-8",
@@ -99,8 +114,53 @@ class OEPLProbeTests(unittest.TestCase):
             self.assertEqual(probe.report(self.root)["status"], "CONFIG_MISMATCH")
 
     def test_duplicate_active_uart_flag_fails_closed(self):
+        self.sdk_active.write_text(
+            "CONFIG_OEPL_HARDWARE_PROFILE_CUSTOM=y\n"
+            "CONFIG_OEPL_HARDWARE_UART_RX=2\n"
+            "CONFIG_OEPL_HARDWARE_UART_TX=3\n",
+            encoding="utf-8",
+        )
         with self.sdk_active.open("a", encoding="utf-8") as handle:
             handle.write("CONFIG_OEPL_HARDWARE_UART_RX=2\n")
+        self.assertEqual(probe.c6_config(self.root)["status"], "MISMATCH")
+
+    def test_default_profile_resolved_from_header_not_numeric_sdkconfig(self):
+        c6 = probe.c6_config(self.root)
+        self.assertEqual(c6["status"], "PASS")
+        self.assertEqual(c6["profile"], "DEFAULT")
+        self.assertEqual(c6["source"], "second_uart.h")
+        self.assertEqual(c6["flags"], {
+            "CONFIG_OEPL_HARDWARE_UART_RX": "2",
+            "CONFIG_OEPL_HARDWARE_UART_TX": "3",
+        })
+
+    def test_non_default_profile_is_not_reported_as_matching_wires(self):
+        self.sdk_active.write_text(
+            "CONFIG_OEPL_HARDWARE_PROFILE_POE_AP=y\n", encoding="utf-8"
+        )
+        self.assertEqual(probe.c6_config(self.root)["status"], "MISMATCH")
+
+    def test_multiple_profiles_fail_closed(self):
+        self.sdk_active.write_text(
+            "CONFIG_OEPL_HARDWARE_PROFILE_DEFAULT=y\n"
+            "CONFIG_OEPL_HARDWARE_PROFILE_POE_AP=y\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(probe.c6_config(self.root)["status"], "MISMATCH")
+
+    def test_missing_profile_never_falls_back_to_default(self):
+        self.sdk_active.write_text(
+            "CONFIG_IDF_TARGET=\"esp32c6\"\n", encoding="utf-8"
+        )
+        self.assertEqual(probe.c6_config(self.root)["status"], "UNKNOWN")
+
+    def test_missing_uart_header_is_unknown_for_default_profile(self):
+        self.header.unlink()
+        self.assertEqual(probe.c6_config(self.root)["status"], "UNKNOWN")
+
+    def test_conflicting_numeric_keys_fail_closed_on_default_profile(self):
+        with self.sdk_active.open("a", encoding="utf-8") as handle:
+            handle.write("CONFIG_OEPL_HARDWARE_UART_RX=4\n")
         self.assertEqual(probe.c6_config(self.root)["status"], "MISMATCH")
 
     def test_source_missing_fail_closed(self):
