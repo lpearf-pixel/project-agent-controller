@@ -22,8 +22,7 @@ MAX_FILE_SIZE = 1_500_000
 def git(root, *args, check=True):
     p = subprocess.run(
         ["git", "-C", str(root), *args],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
-        timeout=30,
+        capture_output=True, check=False, timeout=30,
     )
     if check and p.returncode:
         raise RuntimeError(
@@ -47,10 +46,10 @@ def allowed(path):
         return False
     if path.endswith(BLOCKED_SUFFIXES):
         return False
-    if any(keyword in path.lower() for keyword in ("token", "credential", "password",
-                                                   "secret", "private_key")):
-        return False
-    return True
+    return not any(
+        keyword in path.lower()
+        for keyword in ("token", "credential", "password", "secret", "private_key")
+    )
 
 
 def changes(source):
