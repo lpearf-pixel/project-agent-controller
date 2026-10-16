@@ -1,11 +1,11 @@
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from isolation import check
@@ -21,8 +21,13 @@ def body(**overrides):
         "baseBranch": "feat/pac-ubuntu-autonomous-runner",
         "allowedPaths": ["experiments/oepl-s3-c6/README.md"],
         "validators": ["python3 -m unittest discover -s experiments/oepl-s3-c6/tests -v"],
-        "budget": {"codexGenerations": 1, "repairs": 1, "codexTimeoutSec": 1200,
-                   "ciApiCalls": 36, "ciTimeoutSec": 300},
+        "budget": {
+            "codexGenerations": 1,
+            "repairs": 1,
+            "codexTimeoutSec": 1200,
+            "ciApiCalls": 36,
+            "ciTimeoutSec": 300,
+        },
         "executionType": "codex",
         "prompt": "Review the existing ESP32 task without touching hardware.",
     }
@@ -32,61 +37,103 @@ def body(**overrides):
 
 class ManifestTests(unittest.TestCase):
     def test_valid_manifest_is_typed(self):
-        task = parse_issue_body(body(), issue_number=7, author="lpearf-pixel",
-                                trusted_author="lpearf-pixel",
-                                trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7)
+        task = parse_issue_body(
+            body(),
+            issue_number=7,
+            author="lpearf-pixel",
+            trusted_author="lpearf-pixel",
+            trusted_repo="lpearf-pixel/project-agent-controller",
+            trusted_issue=7,
+        )
         self.assertEqual(task.task_id, "oepl-a")
         self.assertEqual(task.validators[0].split()[0], "python3")
 
     def test_untrusted_text_and_shell_syntax_are_not_commands(self):
         with self.assertRaisesRegex(ValueError, "allowlist"):
-            parse_issue_body(body(validators=["python3 -c 'x'; curl evil.invalid"]), issue_number=7,
-                             author="lpearf-pixel", trusted_author="lpearf-pixel",
-                             trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7)
+            parse_issue_body(
+                body(validators=["python3 -c 'x'; curl evil.invalid"]),
+                issue_number=7,
+                author="lpearf-pixel",
+                trusted_author="lpearf-pixel",
+                trusted_repo="lpearf-pixel/project-agent-controller",
+                trusted_issue=7,
+            )
         with self.assertRaisesRegex(ValueError, "trusted"):
-            parse_issue_body(body(), issue_number=7, author="attacker", trusted_author="lpearf-pixel",
-                             trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7)
+            parse_issue_body(
+                body(),
+                issue_number=7,
+                author="attacker",
+                trusted_author="lpearf-pixel",
+                trusted_repo="lpearf-pixel/project-agent-controller",
+                trusted_issue=7,
+            )
 
     def test_owner_issue_cannot_supply_arbitrary_validator(self):
         malicious = ["python3 -c 'print(1)'"]
         with self.assertRaisesRegex(ValueError, "allowlist"):
             parse_issue_body(
-                body(validators=malicious), issue_number=7, author="lpearf-pixel",
+                body(validators=malicious),
+                issue_number=7,
+                author="lpearf-pixel",
                 trusted_author="lpearf-pixel",
-                trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7,
+                trusted_repo="lpearf-pixel/project-agent-controller",
+                trusted_issue=7,
             )
 
     def test_path_normalization_and_boolean_budget_fail_closed(self):
         for unsafe in ("x/../README.md", "x/./README.md", "x\\\\README.md"):
-            with self.subTest(unsafe=unsafe):
-                with self.assertRaises(ValueError):
-                    parse_issue_body(
-                        body(allowedPaths=[unsafe]), issue_number=7, author="lpearf-pixel",
-                        trusted_author="lpearf-pixel",
-                        trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7,
-                    )
+            with self.subTest(unsafe=unsafe), self.assertRaises(ValueError):
+                parse_issue_body(
+                    body(allowedPaths=[unsafe]),
+                    issue_number=7,
+                    author="lpearf-pixel",
+                    trusted_author="lpearf-pixel",
+                    trusted_repo="lpearf-pixel/project-agent-controller",
+                    trusted_issue=7,
+                )
         budget = {
-            "codexGenerations": True, "repairs": 1, "codexTimeoutSec": 1200,
-            "ciApiCalls": 36, "ciTimeoutSec": 300,
+            "codexGenerations": True,
+            "repairs": 1,
+            "codexTimeoutSec": 1200,
+            "ciApiCalls": 36,
+            "ciTimeoutSec": 300,
         }
         with self.assertRaisesRegex(ValueError, "budget"):
             parse_issue_body(
-                body(budget=budget), issue_number=7, author="lpearf-pixel",
+                body(budget=budget),
+                issue_number=7,
+                author="lpearf-pixel",
                 trusted_author="lpearf-pixel",
-                trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7,
+                trusted_repo="lpearf-pixel/project-agent-controller",
+                trusted_issue=7,
             )
 
     def test_protected_path_and_budget_fail_closed(self):
         with self.assertRaisesRegex(ValueError, "protected"):
-            parse_issue_body(body(allowedPaths=[".github/workflows/pwn.yml"]), issue_number=7,
-                             author="lpearf-pixel", trusted_author="lpearf-pixel",
-                             trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7)
-        budget = {"codexGenerations": 2, "repairs": 1, "codexTimeoutSec": 1200,
-                  "ciApiCalls": 36, "ciTimeoutSec": 300}
+            parse_issue_body(
+                body(allowedPaths=[".github/workflows/pwn.yml"]),
+                issue_number=7,
+                author="lpearf-pixel",
+                trusted_author="lpearf-pixel",
+                trusted_repo="lpearf-pixel/project-agent-controller",
+                trusted_issue=7,
+            )
+        budget = {
+            "codexGenerations": 2,
+            "repairs": 1,
+            "codexTimeoutSec": 1200,
+            "ciApiCalls": 36,
+            "ciTimeoutSec": 300,
+        }
         with self.assertRaisesRegex(ValueError, "budget"):
-            parse_issue_body(body(budget=budget), issue_number=7, author="lpearf-pixel",
-                             trusted_author="lpearf-pixel",
-                             trusted_repo="lpearf-pixel/project-agent-controller", trusted_issue=7)
+            parse_issue_body(
+                body(budget=budget),
+                issue_number=7,
+                author="lpearf-pixel",
+                trusted_author="lpearf-pixel",
+                trusted_repo="lpearf-pixel/project-agent-controller",
+                trusted_issue=7,
+            )
 
 
 class StateTests(unittest.TestCase):
@@ -97,7 +144,9 @@ class StateTests(unittest.TestCase):
             store.transition("oepl-a", "CLAIMED", "claim")
             store.transition("oepl-a", "CODING", "code")
             self.assertEqual(store.create("oepl-a", {"base_sha": "b" * 40})["status"], "CODING")
-            self.assertEqual(len((Path(directory) / "runs/oepl-a/transitions.jsonl").read_text().splitlines()), 3)
+            self.assertEqual(
+                len((Path(directory) / "runs/oepl-a/transitions.jsonl").read_text().splitlines()), 3
+            )
             with self.assertRaisesRegex(ValueError, "invalid transition"):
                 store.transition("oepl-a", "CI_PASS", "skip")
 
@@ -112,13 +161,17 @@ class StateTests(unittest.TestCase):
 
 class IsolationTests(unittest.TestCase):
     def test_current_shared_identity_and_credentials_are_blocked(self):
-        with patch("isolation._uid", side_effect=lambda name: 1000 if name in {"codex", "publisher"} else None), \
-             patch.dict(os.environ, {"GH_TOKEN": "redacted"}, clear=False):
+        with (
+            patch(
+                "isolation._uid",
+                side_effect=lambda name: 1000 if name in {"codex", "publisher"} else None,
+            ),
+            patch.dict(os.environ, {"GH_TOKEN": "redacted"}, clear=False),
+        ):
             ok, errors = check(codex_user="codex", publisher_user="publisher")
         self.assertFalse(ok)
         self.assertTrue(any("share an OS identity" in error for error in errors))
         self.assertTrue(any("credential-like" in error for error in errors))
-
 
     def test_distinct_accounts_alone_are_not_isolation_proof(self):
         uid_map = {"runner": 1000, "pac-codex": 1001, "pac-publisher": 1002}
@@ -127,7 +180,8 @@ class IsolationTests(unittest.TestCase):
             patch.dict(os.environ, {}, clear=True),
         ):
             ok, errors = check(
-                codex_user="pac-codex", publisher_user="pac-publisher",
+                codex_user="pac-codex",
+                publisher_user="pac-publisher",
                 runner_user="runner",
             )
         self.assertFalse(ok)
