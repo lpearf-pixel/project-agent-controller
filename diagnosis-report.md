@@ -87,3 +87,13 @@ UART 仍为 `NOT_TESTED`。当前证据只能证明源配置审计、USB 枚举�
 ## M3 进度
 
 M3 的详细报告见 [`experiments/oepl-s3-c6/m3-acceptance-report.md`](experiments/oepl-s3-c6/m3-acceptance-report.md)。接触恢复已记录为 Issue #7 的根因，但 30 分钟稳定性、历史 Panic 是否复现、受控 reset 和真实首枚价签 RF 验收仍未通过；不得将 Dashboard Online 误写成这些项目的 PASS。
+
+## Ubuntu C6 HTTP 永久修复
+
+已确认原先的“TCP 成功但 HTTP 超时”来自两层本机策略：sing-box `tun-in` 的 `auto_redirect` 把 C6 请求送入 `mac-http`，而运行态 `codex_guard` 的 C6 allow 曾被追加在物理接口 DROP 之后。修复后的持久化源为：
+
+- `/etc/sing-box/config.json` 的 `tun-in.route_exclude_address=["192.168.2.192/32"]`；
+- `/etc/nftables-codex.nft` 中 C6:80 allow 位于 `enp0s5` DROP 之前；
+- `codex-guard.service` 启动时重新加载上述 nftables 源，sing-box 启动时读取上述 JSON。
+
+运行态临时规则用于立即恢复访问；持久化配置源已修正，后续服务重载/启动不会再把 C6 allow 放到 DROP 后面。`apply-c6-direct-fix.sh` 仅针对该 /32、保留代理隔离、保留时间戳备份且不删除文件。
