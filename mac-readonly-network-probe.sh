@@ -8,6 +8,14 @@ TARGET_IP="192.168.2.192"
 HTTP_URL="http://${TARGET_IP}/"
 CONNECT_TIMEOUT="4"
 TOTAL_TIMEOUT="8"
+PLATFORM="$(uname -s 2>/dev/null || printf unknown)"
+
+if [ "$PLATFORM" != "Darwin" ]; then
+    printf '{"probe":"oepl-mac-readonly-network","status":"platform_mismatch","platform":"%s","expected":"Darwin","target_ip":"%s","safety":{"changed_routes":false,"changed_interfaces":false,"changed_firewall":false,"opened_tty":false}}\n' \
+        "$(printf '%s' "$PLATFORM" | sed 's/\\/\\\\/g; s/"/\\"/g')" \
+        "$(printf '%s' "$TARGET_IP" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+    exit 2
+fi
 
 json_escape() {
     sed 's/\\/\\\\/g; s/"/\\"/g; s/[^[:print:]]//g'

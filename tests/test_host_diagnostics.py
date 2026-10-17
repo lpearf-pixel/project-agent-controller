@@ -34,6 +34,8 @@ class HostDiagnosticContractTests(unittest.TestCase):
 
     def test_mac_probe_is_read_only_and_target_scoped(self):
         text = MAC.read_text(encoding="utf-8")
+        self.assertIn('uname -s', text)
+        self.assertIn('platform_mismatch', text)
         for token in ("192.168.2.192", "route -n get", "ifconfig", "scutil --proxy", "curl --noproxy"):
             self.assertIn(token, text)
         for forbidden in ("/dev/tty", "stty", "sudo", "route add", "ifconfig .* up"):

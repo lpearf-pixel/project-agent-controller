@@ -10,7 +10,7 @@
 - Ubuntu 到 `192.168.2.192:80` 的历史 AP 地址没有得到 HTTP 响应；必须用 `time_connect` 和 `time_starttransfer` 字段区分 TCP 建连失败与 TCP 已建立但 HTTP 首字节超时。
 - Codex 沙箱无法看到 `/dev`，但宿主侧只读探针可以看到 USB 设备。因此 USB 设备可见性是 Codex 文件系统沙箱限制，不是 Ubuntu 设备枚举失败。
 - Ubuntu 的 `10.211.55.4/24` 通过 `10.211.55.1` 的默认路由访问 `192.168.2.192`，没有直连 `192.168.2.0/24` 路由。这与 Parallels NAT/共享网络路径一致，但不能单独证明 AP 不在线或地址已改变。
-- 不自动切换 NAT/桥接。先收集 Mac 宿主机结果；只有 Mac 能访问而 Ubuntu 不能访问时，才把 Parallels 网络模式作为候选修复方向。
+- 不自动切换 NAT/桥接。Mac 对比结果尚未有效取得；只有真实 Mac 能访问而 Ubuntu 不能访问时，才把 Parallels 网络模式作为候选修复方向。
 
 ## 网络故障分类
 
@@ -54,13 +54,15 @@
 
 ## Mac 对比步骤
 
+本次导入的 `mac-network-probe.json` 不能作为 Mac 证据：其中出现 Linux 的 `enp0s5`、Linux `ifconfig` 输出和 `10.211.55.4`，而 `route -n get` 与 ARP 字段为空，说明脚本实际在 Ubuntu 上执行。更新后的 Mac 脚本会先检查 `uname -s`；非 Darwin 环境只输出 `platform_mismatch`，不再发起网络请求。
+
 在 Mac 宿主机执行：
 
 ```bash
 bash mac-readonly-network-probe.sh > mac-network-probe.json
 ```
 
-然后将 `mac-network-probe.json` 复制到 PAC 目录。该脚本只做目标路由、接口、ARP、代理状态和禁用代理的 HTTP GET，不修改网络。
+应使用更新后的脚本在真实 Mac 上执行，然后将 `mac-network-probe.json` 复制到 PAC 目录。该脚本只做目标路由、接口、ARP、代理状态和禁用代理的 HTTP GET，不修改网络。当前 PAC 中的旧 JSON 未纳入提交。
 
 比较规则：
 
