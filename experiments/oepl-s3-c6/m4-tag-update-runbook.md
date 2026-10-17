@@ -14,8 +14,9 @@
 - 当前实测：`pending=0`、`updatecount=2`，用户已确认屏幕发生变化
 - 当前结论：类型资源已恢复，尺寸有效的单图更新已成功；完整 RF 中断/重试验收仍未完成
 
-当前分支的 CI 注意事项：`9713646` 修复了 fixture 生成器的 Ruff import 检查，
-但 GitHub 尚未为该 SHA 创建新的 Actions run；不要把旧 SHA 的 PASS 复制给当前 HEAD。
+当前分支的 CI 记录：`9713646` 修复了 fixture 生成器的 Ruff import 检查，
+随后当前 HEAD `86f538b` 的 Offline Safety Gate `39137946490` 和 Controlled
+Runner Release Gate `39137946496` 均已通过。后续变更仍须以对应 SHA 的新 run 为准。
 
 ## 两个关键问题点
 
