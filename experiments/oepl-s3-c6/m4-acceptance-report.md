@@ -10,7 +10,7 @@ RADIO_STATUS_OBSERVABILITY=PASSIVE_WS_AVAILABLE
 TAG_COMPATIBILITY=PARTIAL_SOURCE_SUPPORT_EXACT_TAG_UNKNOWN
 FIRST_TAG_AVAILABLE=YES
 FIRST_TAG_JOIN=OBSERVED
-FIRST_TAG_RF_STATUS=IMAGE_UPDATE_ACCEPTED_DISPLAY_UNVERIFIED
+FIRST_TAG_RF_STATUS=BLOCKED_MISSING_TAGTYPE_01
 CI_OEPL=PASS (run 39120160234, commit 995863e)
 CI_PAC_RELEASE=PASS (run 39120160207, commit 995863e)
 COMMIT_SHA=995863e1a6ce0aac1a841e3fb428de74fae3e73d (report-only follow-up commit may differ)
@@ -45,7 +45,7 @@ NEXT_HARDWARE_ACTION=USER_VISUALLY_CONFIRM_DISPLAY_BEFORE_ANY_SECOND_UPDATE
 - `radio_disconnect_count`：当前接口未提供可信的独立计数，标记 `UNVERIFIED`；
 - 重启：`uptime` 回退或 `errMsg=REBOOTING` 可观察，但不能把缺失广播自动算作 Panic。
 
-本轮不连接 WebSocket、不发送任何帧、不读取原始日志，以避免 MAC、别名、凭据或设备日志进入采集物。真实 tag 事件、射频重试和断连仍为 `UNVERIFIED`。
+本轮建立了 15 秒只读 WebSocket 订阅，仅发送标准握手、不发送应用控制帧；观察到 `apstate=1`、`runstate=2`、`recordcount=1` 和递增 uptime，未观察到传输错误事件。原始日志未读取，MAC、别名和凭据未进入采集物。真实 tag 传输重试和断连仍为 `UNVERIFIED`。
 
 ## 3. 首枚价签可重复验收流程
 
@@ -65,7 +65,7 @@ NEXT_HARDWARE_ACTION=USER_VISUALLY_CONFIRM_DISPLAY_BEFORE_ANY_SECOND_UPDATE
 6. 仅在授权的中断场景下记录一次通信中断与自动重试；不人为断电、不复位、不改变接线。
 7. 只有所有证据一致时标记 `REAL_RF_PASS`；否则标记 `REAL_RF_FAIL` 或 `UNVERIFIED`，并保留原因。
 
-当前已有真实入网记录；一次图片请求已被 AP 接受，但没有显示完成和重试证据，因此 `FIRST_TAG_RF_STATUS=IMAGE_UPDATE_ACCEPTED_DISPLAY_UNVERIFIED`，不是 PASS。
+当前已有真实入网记录；一次图片请求已被 AP 接受，但 AP 缺少 `01.json` 标签类型定义，未形成传输队列，因此 `FIRST_TAG_RF_STATUS=BLOCKED_MISSING_TAGTYPE_01`，不是 PASS。
 
 ## 4. 新鲜只读入网证据
 
@@ -84,9 +84,11 @@ pending=0
 
 源码定义中 `hwType=0x01` 对应 `SOLUM_29_SSD1619` 类型名；这仍是 AP 记录的类型字段，不替代标签背标/固件身份确认。在获得明确授权后执行了一次 `/imgupload` 小图片 POST：响应为 `HTTP=200`、正文为 `Ok, saved`。标签随后自然检查-in，`lastseen` 更新，读取到 `LQI=61`、`RSSI=-37`；但 `pending=0`、`updatecount=0`、`updatelast=0`，没有可验证的显示完成计数或屏幕视觉证据。因此当前结论是“图片请求已被 AP 接受，显示更新未验证”，不是 `REAL_RF_PASS`。
 
+进一步只读检查 AP `GET /tagtypes/01.json` 返回 `HTTP=404`。源码 `contentmanager.cpp::drawNew()` 在 `getHwType(taginfo->hwType)` 得不到定义（`bpp == 0`）时只记录“无定义”、将 `nextupdate` 推迟约 300 秒并返回，不创建图片传输队列。这解释了 `pending=0`、`updatecount=0` 及约 5 分钟重试时间；当前最可能的直接阻断是 AP LittleFS 缺少 `01.json` 标签类型资源。此结论来自源码和 HTTP 404 证据，尚未修改 AP 文件系统。
+
 ## 5. 当前限制与下一步
 
 - C6 精确 Flash 镜像身份仍为 `UNKNOWN`；AP 报告的 `ESP32-C6`/版本字段不能替代镜像哈希。
 - GPIO47→EN 仍未通过硬件安全审查；M4 不使用它，也不执行复位。
-- 不执行刷写、配对、图片上传、HTTP POST、串口打开、无线自检或设备重启。
-- 最小下一步：由用户目视确认屏幕内容，再在明确授权下执行第二次内容更新；在此之前保持 `IMAGE_UPDATE_ACCEPTED_DISPLAY_UNVERIFIED`，不宣称 `REAL_RF_PASS`。
+- 不再执行第二次图片上传；不执行刷写、配对、串口打开、无线自检或设备重启。
+- 最小下一步：在备份并核对版本后，由用户明确授权一次 AP LittleFS 标签类型资源补齐/恢复操作；之后再重新执行一次受控图片更新。当前保持 `BLOCKED_MISSING_TAGTYPE_01`，不宣称 `REAL_RF_PASS`。
