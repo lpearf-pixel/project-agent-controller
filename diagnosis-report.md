@@ -144,4 +144,4 @@ PAC 保留补丁：`experiments/oepl-s3-c6/patches/0001-bound-c6-uart-printf.pat
 - PAC 全量 pytest：PASS，`176 passed, 1 warning, 16 subtests passed`；在普通用户的沙箱外临时验证环境执行。
 - OEPL Offline Safety Gate：PASS，36 项 fixture 测试及编译/shell 检查通过。
 - v0.2 Controlled Runner Release Gate：PASS（远端 SHA `6a30d0f`；Ubuntu/Docker 与 macOS/LaunchAgent 两个 job 均通过）。本机无 Docker daemon，但远端已完成 Docker fixture 验证。
-- M3 没有新鲜 30 分钟 AP 采样；稳定性、Panic 和 radio disconnect 均保持 `UNVERIFIED`。Dashboard Online/fw 0021 是用户报告的既有证据，不覆盖旧的 `RADIO none` 历史记录，也不等同于本轮只读采样。
+- M3 已在 Ubuntu 完成新鲜只读采样：60 个 30 秒样本中 60/60 TCP 可达、60/60 `HTTP_INFO_OBSERVED`、0 API 失败、0 `radio_none`、0 个样本内 Panic 观测。`RADIO_DISCONNECT_COUNT` 与 uptime 仍为 `UNVERIFIED`，因为 `/sysinfo` 不暴露实时 `apstate`/uptime；Dashboard Online/fw 0021 仍不等同于精确 Flash 身份证明，也不覆盖旧的 `RADIO none` 历史记录。
