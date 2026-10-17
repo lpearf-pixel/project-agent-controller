@@ -10,7 +10,7 @@
 - Ubuntu 到 `192.168.2.192:80` 的历史 AP 地址没有得到 HTTP 响应；必须用 `time_connect` 和 `time_starttransfer` 字段区分 TCP 建连失败与 TCP 已建立但 HTTP 首字节超时。
 - Codex 沙箱无法看到 `/dev`，但宿主侧只读探针可以看到 USB 设备。因此 USB 设备可见性是 Codex 文件系统沙箱限制，不是 Ubuntu 设备枚举失败。
 - Ubuntu 的 `10.211.55.4/24` 通过 `10.211.55.1` 的默认路由访问 `192.168.2.192`，没有直连 `192.168.2.0/24` 路由。这与 Parallels NAT/共享网络路径一致，但不能单独证明 AP 不在线或地址已改变。
-- 不自动切换 NAT/桥接。Mac 对比结果尚未有效取得；只有真实 Mac 能访问而 Ubuntu 不能访问时，才把 Parallels 网络模式作为候选修复方向。
+- 真实 Mac 对比已完成：Mac 可访问 AP，而 Shared/NAT 下的 Ubuntu 不可访问；因此 Shared/NAT 路径是当前网络故障边界。不要由 Codex 自动切换网络模式；若要恢复 Ubuntu 直达 AP，下一步应由用户在 Parallels UI 评估桥接网络。
 
 ## 网络故障分类
 
@@ -40,7 +40,7 @@
 - Ubuntu 环境代理变量均存在，但探针使用 `--noproxy '*'`，且输出不包含代理值；UFW 状态不可用，未修改防火墙；
 - 只读探针可枚举 `/dev/ttyACM1` 和 `/dev/ttyACM2`，Codex 沙箱内两者均不存在。
 
-这些证据不能把问题直接归因于 Codex 网络沙箱：宿主侧请求也失败。尚未解决的网络分支是 Parallels NAT/桥接路径、AP HTTP 服务不可用，或 AP 已不在历史 IP。
+真实 Mac 证据已排除 AP HTTP 服务不可用和历史 IP 完全错误这两个主要分支：Mac 在 `en0` 上对同一地址收到 HTTP 200。Ubuntu 失败因此不再是 Codex 网络沙箱本身，也不是 AP 已离线；当前最强根因是 Parallels Shared/NAT 没有把 Ubuntu 的 `10.211.55.0/24` 访达路径转发到 Mac 所在的 `192.168.2.0/24` LAN。
 
 ## USB 身份核验
 
@@ -54,7 +54,7 @@
 
 ## Mac 对比步骤
 
-本次导入的 `mac-network-probe.json` 不能作为 Mac 证据：其中出现 Linux 的 `enp0s5`、Linux `ifconfig` 输出和 `10.211.55.4`，而 `route -n get` 与 ARP 字段为空，说明脚本实际在 Ubuntu 上执行。更新后的 Mac 脚本会先检查 `uname -s`；非 Darwin 环境只输出 `platform_mismatch`，不再发起网络请求。
+先前导入的 `mac-network-probe.json` 不能作为 Mac 证据：其中出现 Linux 的 `enp0s5`、Linux `ifconfig` 输出和 `10.211.55.4`，而 `route -n get` 与 ARP 字段为空，说明脚本实际在 Ubuntu 上执行。随后从 `/media/psf/chatgpt/oepl-s3-c6-stage/mac-network-probe.json` 读取到真实 Mac 结果：目标路由接口为 `en0`，Mac 侧 HTTP `200`，`time_connect=0.052597`、`time_starttransfer=0.105093`、`time_total=0.116871`。更新后的 Mac 脚本会先检查 `uname -s`；非 Darwin 环境只输出 `platform_mismatch`，不再发起网络请求。
 
 在 Mac 宿主机执行：
 
@@ -64,11 +64,11 @@ bash mac-readonly-network-probe.sh > mac-network-probe.json
 
 应使用更新后的脚本在真实 Mac 上执行，然后将 `mac-network-probe.json` 复制到 PAC 目录。该脚本只做目标路由、接口、ARP、代理状态和禁用代理的 HTTP GET，不修改网络。当前 PAC 中的旧 JSON 未纳入提交。
 
-比较规则：
+比较规则及本次结果：
 
 | Mac 结果 | Ubuntu 结果 | 判断 |
 |---|---|---|
-| TCP/HTTP 成功 | 失败 | 优先检查 Parallels NAT/桥接或 Ubuntu 到宿主网络的转发路径；不自动切换模式 |
+| TCP/HTTP 成功 | `http_first_byte_timeout` | **本次结果**：优先检查 Parallels Shared/NAT 到 `192.168.2.0/24` 的转发路径；不自动切换模式 |
 | Mac 与 Ubuntu 都失败 | 失败 | 优先怀疑 AP 历史 IP、AP 服务或物理网络路径，不改 Parallels 模式 |
 | Mac 失败，Ubuntu 成功 | 成功 | AP 可达性存在时序或接口差异，先保存两端证据，不改硬件 |
 | 两端都成功 | 成功 | 网络故障解除；仍不能推断 UART 成功 |
@@ -82,4 +82,4 @@ UART 仍为 `NOT_TESTED`。当前证据只能证明源配置审计、USB 枚举�
 - S3 能从 C6 获得新鲜 ACK/心跳；
 - ACM 设备的打开不会触发板级复位或 DTR/RTS 副作用。
 
-下一步最小操作是：先让用户执行 Mac 只读脚本并导入 JSON，再根据两端分类决定是否仅由用户在 Parallels UI 中评估网络模式。不得自动切换桥接，不得打开串口，不得执行 `/radio_selftest`、刷写或重启。
+下一步最小操作是：由用户在 Parallels UI 评估临时桥接到 Mac 当前网络接口，或添加第二个桥接适配器保留 Shared/NAT；切换后只重新读取 Ubuntu 路由并运行同一只读 HTTP 探针。不得由 Codex 自动切换桥接，不得打开串口，不得执行 `/radio_selftest`、刷写或重启。
