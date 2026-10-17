@@ -81,6 +81,42 @@ class TTYTests(unittest.TestCase):
         self.assertNotIn("private.example.invalid", str(result))
         self.assertNotIn("UART_PASS", str(result))
 
+    def test_ap_sysinfo_exposes_stability_fields_without_private_metadata(self):
+        import json
+
+        class Reply:
+            status = 200
+
+            def read(self, _):
+                return json.dumps({
+                    "ap_version": 33,
+                    "ap_type": 198,
+                    "hasC6": 1,
+                    "resetreason": "Power-on",
+                    "crashed": False,
+                    "alias": "private-room",
+                    "wifissid": "private-wifi",
+                }).encode()
+
+        class Connection:
+            def request(self, *_args, **_kwargs):
+                pass
+
+            def getresponse(self):
+                return Reply()
+
+            def close(self):
+                pass
+
+        with patch.object(
+            wired_probe.http.client, "HTTPConnection", return_value=Connection()
+        ):
+            result = wired_probe.http_sysinfo("192.168.2.192", 80)
+        self.assertEqual(result["fields"]["resetreason"], "Power-on")
+        self.assertFalse(result["fields"]["crashed"])
+        self.assertNotIn("private-room", str(result))
+        self.assertNotIn("private-wifi", str(result))
+
     def test_ap_info_refuses_public_targets_and_bad_json(self):
         self.assertEqual(
             wired_probe.http_sysinfo("8.8.8.8", 80)["status"], "INVALID_TARGET"

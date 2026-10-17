@@ -71,7 +71,10 @@ def http_sysinfo(ip: str | None, port: int, timeout: float = 3.0) -> dict:
             return {"status": "HTTP_INVALID_JSON", "code": 200, "bytes": len(raw)}
         if not isinstance(data, dict):
             return {"status": "HTTP_INVALID_RESPONSE", "code": 200}
-        allowed = ("env", "ap_version", "ap_type", "ap_typename", "channel", "hasC6")
+        allowed = (
+            "env", "ap_version", "ap_type", "ap_typename", "channel", "hasC6",
+            "resetreason", "crashed", "buildversion",
+        )
         details = {
             key: value for key in allowed
             if (value := data.get(key)) is not None

@@ -83,3 +83,7 @@ UART 仍为 `NOT_TESTED`。当前证据只能证明源配置审计、USB 枚举�
 - ACM 设备的打开不会触发板级复位或 DTR/RTS 副作用。
 
 下一步最小操作是：由用户在 Parallels UI 评估临时桥接到 Mac 当前网络接口，或添加第二个桥接适配器保留 Shared/NAT；切换后只重新读取 Ubuntu 路由并运行同一只读 HTTP 探针。不得由 Codex 自动切换桥接，不得打开串口，不得执行 `/radio_selftest`、刷写或重启。
+
+## M3 进度
+
+M3 的详细报告见 [`experiments/oepl-s3-c6/m3-acceptance-report.md`](experiments/oepl-s3-c6/m3-acceptance-report.md)。接触恢复已记录为 Issue #7 的根因，但 30 分钟稳定性、历史 Panic 是否复现、受控 reset 和真实首枚价签 RF 验收仍未通过；不得将 Dashboard Online 误写成这些项目的 PASS。
