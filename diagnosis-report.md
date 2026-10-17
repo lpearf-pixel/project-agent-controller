@@ -143,5 +143,5 @@ PAC 保留补丁：`experiments/oepl-s3-c6/patches/0001-bound-c6-uart-printf.pat
 - `ruff check .`：PASS；`mypy src`：PASS（48 个源文件）。
 - PAC 全量 pytest：PASS，`176 passed, 1 warning, 16 subtests passed`；在普通用户的沙箱外临时验证环境执行。
 - OEPL Offline Safety Gate：PASS，36 项 fixture 测试及编译/shell 检查通过。
-- v0.2 隔离任务 preflight 与 Git 只读 preflight：PASS；本机无 Docker daemon，Docker fixture 与 GitHub Actions 完整 Release Gate 留待远端 SHA 验证。
+- v0.2 Controlled Runner Release Gate：PASS（远端 SHA `6a30d0f`；Ubuntu/Docker 与 macOS/LaunchAgent 两个 job 均通过）。本机无 Docker daemon，但远端已完成 Docker fixture 验证。
 - M3 没有新鲜 30 分钟 AP 采样；稳定性、Panic 和 radio disconnect 均保持 `UNVERIFIED`。Dashboard Online/fw 0021 是用户报告的既有证据，不覆盖旧的 `RADIO none` 历史记录，也不等同于本轮只读采样。

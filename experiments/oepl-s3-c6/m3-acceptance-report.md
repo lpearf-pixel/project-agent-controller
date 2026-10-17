@@ -63,7 +63,7 @@ python3 experiments/oepl-s3-c6/m3_stability.py \
 - `mypy src`：PASS，48 个源文件无问题。
 - PAC 全量 pytest：PASS，`176 passed, 1 warning, 16 subtests passed`；在沙箱外普通用户环境执行，避免 Codex 沙箱对 FastAPI TestClient 线程的限制。
 - OEPL Offline Safety Gate：PASS，36 项 fixture 测试通过，并完成 probe 编译和 shell 语法检查。
-- v0.2 隔离任务 preflight：PASS；本机没有 Docker daemon，因此 Docker fixture 子门禁待 GitHub Actions 验证，不能在本地标记完整 Release Gate PASS。
+- v0.2 Controlled Runner Release Gate：PASS（远端 SHA `6a30d0f`；Ubuntu/Docker 与 macOS/LaunchAgent 两个 job 均通过）。本机没有 Docker daemon，但 GitHub Actions 已完成 Docker fixture 验证。
 - 本轮没有新的 AP 30 分钟 JSONL/summary 样本；未重复采集，也没有把历史 Online、旧 Panic 或 HTTP 结果冒充新鲜稳定性样本。因此 `30MIN_STABILITY=UNVERIFIED`、`NEW_PANIC_COUNT=UNVERIFIED`、`RADIO_DISCONNECT_COUNT=UNVERIFIED`。
 
 本轮软件修复只涉及 Ruff 兼容性、UART 测试隔离/真实 C 边界 harness、README 路径和报告；没有刷写、串口打开、复位、GPIO、无线自检或网络配置变更。
