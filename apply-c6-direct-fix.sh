@@ -51,15 +51,21 @@ fi
 
 # Apply the narrow runtime filter rule before the existing physical-interface DROP.
 # The source file is loaded in the correct order; this also repairs an older
-# runtime rule that may have been appended after the DROP.
-drop_handle=$(nft -a list chain inet codex_guard output \
-  | awk '/oifname "enp0s5" counter.* drop/ {print $NF; exit}')
-if [[ -n "$drop_handle" ]]; then
-  nft insert rule inet codex_guard output position "$drop_handle" \
-    oifname "enp0s5" ip daddr 192.168.2.192 tcp dport 80 accept
-else
-  nft add rule inet codex_guard output \
-    oifname "enp0s5" ip daddr 192.168.2.192 tcp dport 80 accept
+# runtime rule that may have been appended after the DROP. Keep reruns idempotent.
+if ! nft -a list chain inet codex_guard output | awk '
+  /oifname "enp0s5" ip daddr 192\.168\.2\.192 tcp dport 80 accept/ { allow=1 }
+  /oifname "enp0s5" counter.* drop/ { saw_drop=1; exit }
+  END { exit (allow && saw_drop) ? 0 : 1 }
+'; then
+  drop_handle=$(nft -a list chain inet codex_guard output \
+    | awk '/oifname "enp0s5" counter.* drop/ {print $NF; exit}')
+  if [[ -n "$drop_handle" ]]; then
+    nft insert rule inet codex_guard output position "$drop_handle" \
+      oifname "enp0s5" ip daddr 192.168.2.192 tcp dport 80 accept
+  else
+    nft add rule inet codex_guard output \
+      oifname "enp0s5" ip daddr 192.168.2.192 tcp dport 80 accept
+  fi
 fi
 
 systemctl reload sing-box
