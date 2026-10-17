@@ -97,3 +97,43 @@ M3 的详细报告见 [`experiments/oepl-s3-c6/m3-acceptance-report.md`](experim
 - `codex-guard.service` 启动时重新加载上述 nftables 源，sing-box 启动时读取上述 JSON。
 
 运行态临时规则用于立即恢复访问；持久化配置源已修正，后续服务重载/启动不会再把 C6 allow 放到 DROP 后面。`apply-c6-direct-fix.sh` 仅针对该 /32、保留代理隔离、保留时间戳备份且不删除文件。
+
+## M2 固件身份、UART 缺陷与复位电路验收
+
+### UART `uart_printf()`
+
+原始 OEPL 工作区中的 `second_uart.c` 仍保持未修改。旧实现把 `vsnprintf()` 返回的“所需长度”直接传给 `uart_write_bytes()`；当格式化结果超过 `char buffer[128]` 时，返回值可能大于实际缓冲区内容，形成越界读取风险。
+
+PAC 保留补丁：`experiments/oepl-s3-c6/patches/0001-bound-c6-uart-printf.patch`。审查结论：
+
+- `vsnprintf()` 使用容量 `sizeof(buffer)`；
+- `len < 0` 或 `len == 0` 时不写；
+- `len >= sizeof(buffer)` 时截断为 `sizeof(buffer)-1`；
+- `uart_write_bytes(1, buffer, len)` 只在正长度、且长度 1..127 时调用；
+- 不读取 NUL 终止字节之后的内存。
+
+新增/更新边界契约测试覆盖 `INT_MIN`、`-1`、`0`、`1`、`127`、`128`、`129`、`4096`、`INT_MAX`。补丁通过 `git apply --check --unidiff-zero`，未应用到原始 OEPL 工作区，未刷写设备。
+
+本轮受影响回归测试共 25 项通过（UART 补丁、build gate、只读配置探针）；补丁脚本和构建脚本通过 Bash 语法检查，敏感信息扫描未发现凭据或家庭网络原始日志。尝试在 `/tmp` 的只读副本进行非刷写构建，但 PlatformIO 平台包下载未完成，ESP-IDF 临时 shell 缺少 `esp_idf_monitor`/cmake 依赖；因此本轮不宣称新增固件构建 PASS。此前报告中的历史 S3/C6 build-only PASS 仍不等同于补丁已刷入设备。
+
+### C6 固件身份
+
+`main.c` 的 `version=0x0021` 和本地 ELF/构建元数据只能证明“当前源码期望的应用版本”。历史 USB-JTAG/ROM chip-id 只能证明芯片与 ROM USB 通道可用，不能证明当前 Flash 中运行的是该应用 ELF；本轮没有重复 esptool、读取 Flash 或打开串口。因此：
+
+`C6_FLASH_IDENTITY=UNKNOWN`
+
+### GPIO47→EN
+
+`resetRadio()` 将 S3 GPIO47 配为推挽 OUTPUT，LOW 约 50 ms 后 HIGH；`APTagReset()` 也以同类方式驱动 reset。项目记录的 C6 板型为 N16-M，但没有精确 N16-M 原理图/板号照片可供核验。官方 DevKitM-1 资料显示 EN 与上拉/RC、按键和 USB-UART DTR/RTS 自动下载电路相关，但不能替代 N16-M 的板级证明。
+
+因此：
+
+`RESET_WIRING_REVIEW=RESET_WIRING_NOT_APPROVED`
+
+缺少的证据是：精确板卡型号与 revision、EN/CHIP_PU 原理图、电源/保护路径、DTR/RTS 自动复位晶体管连接，以及 GPIO47 高电平接入 EN 时的电气兼容性。未改变 GPIO、未复位、未单板断电。
+
+### S3 Panic 与最小握手计划
+
+`S3_PANIC_STATUS=PANIC_ROOT_CAUSE_UNKNOWN`：没有匹配运行镜像的 ELF 和完整寄存器/回溯，不能继续符号化归因。
+
+人工明确授权、确认 TTY/DTR/RTS 风险后，单次受控握手的证据顺序应为：在安全采集方式下观察 C6 启动输出 `RES>`、`RDY>`；S3 以 115200 发送 `RDY?`，收到完整 `ACK>`；再发送 `NFO?` 并收到 `ACK>` 及版本/类型/MAC 字段；如协议要求，再明确记录 `HSPD` 后的 2,000,000 baud `ACK>`。只有收发方向、字节内容、波特率转换和时间顺序均被记录，才能标记 `UART_PASS`。本轮没有执行该操作。

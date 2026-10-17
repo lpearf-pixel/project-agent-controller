@@ -32,7 +32,7 @@ class C6UartPatchTests(unittest.TestCase):
         source = SOURCE.read_text(encoding="utf-8")
         self.assertIn("char buffer[128];", source)
         self.assertIn(
-            "+\tif (len >= (int)sizeof(buffer)) len = sizeof(buffer) - 1;",
+            "+\t\tif (len >= (int)sizeof(buffer)) len = sizeof(buffer) - 1;",
             patch,
         )
         self.assertIn("+\tif (len > 0)", patch)
@@ -53,11 +53,19 @@ class C6UartPatchTests(unittest.TestCase):
                 self.assertEqual(self.bounded_write_length(result), wanted)
 
     def test_uart_write_length_is_nonnegative_and_in_bounds(self):
-        for result in (-1, 0, 1, 127, 128, 129, 4096):
+        for result in (-2147483648, -1, 0, 1, 127, 128, 129, 4096, 2147483647):
             with self.subTest(result=result):
                 length = self.bounded_write_length(result)
                 self.assertGreaterEqual(length, 0)
                 self.assertLess(length, 128)
+
+    def test_write_contract_is_explicitly_bounded(self):
+        patch = PATCH.read_text(encoding="utf-8")
+        source = SOURCE.read_text(encoding="utf-8")
+        self.assertIn("vsnprintf(buffer, sizeof(buffer), format, args)", source)
+        self.assertIn("len >= (int)sizeof(buffer)", patch)
+        self.assertIn("sizeof(buffer) - 1", patch)
+        self.assertIn("uart_write_bytes(1, buffer, len);", patch)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@
 -	if (len > 0) {
 -		uart_write_bytes(1, buffer, len);
 -	}
-+	if (len >= (int)sizeof(buffer)) len = sizeof(buffer) - 1;
-+	if (len > 0)
++	if (len > 0) {
++		if (len >= (int)sizeof(buffer)) len = sizeof(buffer) - 1;
 +		uart_write_bytes(1, buffer, len);
++	}
