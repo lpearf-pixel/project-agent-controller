@@ -6,10 +6,12 @@ REPORT = Path("experiments/oepl-s3-c6/m4-acceptance-report.md")
 def test_m4_report_has_gated_statuses_and_no_rf_pass_claim() -> None:
     text = REPORT.read_text(encoding="utf-8")
     assert "M4_SOFTWARE_READY=READY" in text
-    assert "FIRST_TAG_RF_STATUS=READY_NO_REAL_RF" in text
-    assert "FIRST_TAG_AVAILABLE=NO" in text
+    assert "FIRST_TAG_RF_STATUS=READY_FIRST_JOIN_ONLY" in text
+    assert "FIRST_TAG_AVAILABLE=YES" in text
+    assert "record_count=1" in text
+    assert "updatecount=0" in text
     assert "REAL_RF_PASS" in text
-    assert "当前没有真实价签身份和 RF 事件" in text
+    assert "没有显示更新和重试证据" in text
     assert "serial" not in text.lower() or "串口" in text
 
 

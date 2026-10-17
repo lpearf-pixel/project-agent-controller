@@ -8,8 +8,9 @@
 M4_SOFTWARE_READY=READY
 RADIO_STATUS_OBSERVABILITY=PASSIVE_WS_AVAILABLE
 TAG_COMPATIBILITY=PARTIAL_SOURCE_SUPPORT_EXACT_TAG_UNKNOWN
-FIRST_TAG_AVAILABLE=NO
-FIRST_TAG_RF_STATUS=READY_NO_REAL_RF
+FIRST_TAG_AVAILABLE=YES
+FIRST_TAG_JOIN=OBSERVED
+FIRST_TAG_RF_STATUS=READY_FIRST_JOIN_ONLY
 CI_OEPL=PASS (run 39120160234, commit 995863e)
 CI_PAC_RELEASE=PASS (run 39120160207, commit 995863e)
 COMMIT_SHA=995863e1a6ce0aac1a841e3fb428de74fae3e73d (report-only follow-up commit may differ)
@@ -64,9 +65,26 @@ NEXT_HARDWARE_ACTION=IDENTIFY_TAG_AND_AUTHORIZE_ONE_CONTROLLED_RF_TEST
 6. 仅在授权的中断场景下记录一次通信中断与自动重试；不人为断电、不复位、不改变接线。
 7. 只有所有证据一致时标记 `REAL_RF_PASS`；否则标记 `REAL_RF_FAIL` 或 `UNVERIFIED`，并保留原因。
 
-当前没有真实价签身份和 RF 事件，因此 `FIRST_TAG_RF_STATUS=READY_NO_REAL_RF`，不是 PASS。
+当前已有真实入网记录，但没有显示更新和重试证据，因此 `FIRST_TAG_RF_STATUS=READY_FIRST_JOIN_ONLY`，不是 PASS。
 
-## 4. 当前限制与下一步
+## 4. 新鲜只读入网证据
+
+通过 AP `GET /current/tagDB.json` 获取并在本地脱敏解析，未输出 MAC、别名、文件名或图像数据：
+
+```text
+record_count=1
+hwType=0x01
+LQI=50
+RSSI=-39
+channel=11
+version=41
+updatecount=0
+pending=0
+```
+
+源码定义中 `hwType=0x01` 对应 `SOLUM_29_SSD1619` 类型名；这仍是 AP 记录的类型字段，不替代标签背标/固件身份确认。`updatecount=0` 证明本轮尚未进行图片下发，因此当前结论是首次入网观察到，RF 显示更新尚未验收。
+
+## 5. 当前限制与下一步
 
 - C6 精确 Flash 镜像身份仍为 `UNKNOWN`；AP 报告的 `ESP32-C6`/版本字段不能替代镜像哈希。
 - GPIO47→EN 仍未通过硬件安全审查；M4 不使用它，也不执行复位。
