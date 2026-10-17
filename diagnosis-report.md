@@ -136,4 +136,12 @@ PAC 保留补丁：`experiments/oepl-s3-c6/patches/0001-bound-c6-uart-printf.pat
 
 `S3_PANIC_STATUS=PANIC_ROOT_CAUSE_UNKNOWN`：没有匹配运行镜像的 ELF 和完整寄存器/回溯，不能继续符号化归因。
 
-人工明确授权、确认 TTY/DTR/RTS 风险后，单次受控握手的证据顺序应为：在安全采集方式下观察 C6 启动输出 `RES>`、`RDY>`；S3 以 115200 发送 `RDY?`，收到完整 `ACK>`；再发送 `NFO?` 并收到 `ACK>` 及版本/类型/MAC 字段；如协议要求，再明确记录 `HSPD` 后的 2,000,000 baud `ACK>`。只有收发方向、字节内容、波特率转换和时间顺序均被记录，才能标记 `UART_PASS`。本轮没有执行该操作。
+人工明确授权、确认 TTY/DTR/RTS 风险后，单次受控握手的证据顺序应为：在安全采集方式下观察 C6 启动输出 `RES>`、`RDY>`；S3 以 115200 发送 `RDY?`，收到完整 `ACK>`；再发送 `NFO?` 并收到 `ACK>` 及版本/类型/MAC 字段；如协议要求，再明确记录 `HSPD` 后的 2,000,000 baud `ACK>`。只有收发方向、字节内容、波特率转换和时间顺序均被记录，才能标记正式 UART 通过。本轮没有执行该操作。
+
+## M3 本轮 CI 验证
+
+- `ruff check .`：PASS；`mypy src`：PASS（48 个源文件）。
+- PAC 全量 pytest：PASS，`176 passed, 1 warning, 16 subtests passed`；在普通用户的沙箱外临时验证环境执行。
+- OEPL Offline Safety Gate：PASS，36 项 fixture 测试及编译/shell 检查通过。
+- v0.2 隔离任务 preflight 与 Git 只读 preflight：PASS；本机无 Docker daemon，Docker fixture 与 GitHub Actions 完整 Release Gate 留待远端 SHA 验证。
+- M3 没有新鲜 30 分钟 AP 采样；稳定性、Panic 和 radio disconnect 均保持 `UNVERIFIED`。Dashboard Online/fw 0021 是用户报告的既有证据，不覆盖旧的 `RADIO none` 历史记录，也不等同于本轮只读采样。

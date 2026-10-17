@@ -1,8 +1,6 @@
 """Offline contract tests for the host and Mac read-only diagnostics."""
-import json
 import unittest
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 HOST = ROOT / "host-readonly-probe.sh"
@@ -27,7 +25,9 @@ class HostDiagnosticContractTests(unittest.TestCase):
 
     def test_host_probe_reports_network_and_proxy_presence_without_values(self):
         text = HOST.read_text(encoding="utf-8")
-        for token in ("ip route", "ip -br addr", "ip neigh", "http_proxy", "https_proxy", "no_proxy"):
+        for token in (
+            "ip route", "ip -br addr", "ip neigh", "http_proxy", "https_proxy", "no_proxy"
+        ):
             self.assertIn(token, text)
         self.assertIn("firewall", text)
         self.assertNotIn("env |", text)
@@ -36,7 +36,9 @@ class HostDiagnosticContractTests(unittest.TestCase):
         text = MAC.read_text(encoding="utf-8")
         self.assertIn('uname -s', text)
         self.assertIn('platform_mismatch', text)
-        for token in ("192.168.2.192", "route -n get", "ifconfig", "scutil --proxy", "curl --noproxy"):
+        for token in (
+            "192.168.2.192", "route -n get", "ifconfig", "scutil --proxy", "curl --noproxy"
+        ):
             self.assertIn(token, text)
         for forbidden in ("/dev/tty", "stty", "sudo", "route add", "ifconfig .* up"):
             self.assertNotIn(forbidden, text)

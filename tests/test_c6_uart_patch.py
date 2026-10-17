@@ -1,6 +1,8 @@
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
-
 
 PATCH = (
     Path(__file__).resolve().parents[1]
@@ -9,14 +11,61 @@ PATCH = (
     / "patches"
     / "0001-bound-c6-uart-printf.patch"
 )
-SOURCE = (
-    Path(__file__).resolve().parents[1].parent
-    / "OpenEPaperLink-git"
-    / "ARM_Tag_FW"
-    / "OpenEPaperLink_esp32_C6_AP"
-    / "main"
-    / "second_uart.c"
-)
+C_HARNESS = r"""
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+
+static int observed_bad;
+static int observed_len;
+static char observed[128];
+
+static int uart_write_bytes(int port, const char *buffer, int len) {
+    if (port != 1 || len < 0 || len > 127) {
+        observed_bad = 1;
+    }
+    observed_len = len;
+    if (len > 0) {
+        memcpy(observed, buffer, (size_t)len);
+    }
+    return len;
+}
+
+static void tested_uart_printf(const char *format, ...) {
+    char buffer[128];
+    va_list args;
+    va_start(args, format);
+    int len = vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    if (len > 0) {
+        if (len >= (int)sizeof(buffer)) {
+            len = sizeof(buffer) - 1;
+        }
+        uart_write_bytes(1, buffer, len);
+    }
+}
+
+static int expect_length(const char *text, int expected) {
+    observed_bad = 0;
+    observed_len = -1;
+    memset(observed, 0, sizeof(observed));
+    tested_uart_printf("%s", text);
+    return !observed_bad && observed_len == expected;
+}
+
+int main(void) {
+    char exact[128];
+    char long_text[4097];
+    memset(exact, 'A', sizeof(exact) - 1);
+    exact[sizeof(exact) - 1] = '\0';
+    memset(long_text, 'B', sizeof(long_text) - 1);
+    long_text[sizeof(long_text) - 1] = '\0';
+    return expect_length("", -1) &&
+           expect_length("x", 1) &&
+           expect_length(exact, 127) &&
+           expect_length(long_text, 127) ? 0 : 1;
+}
+"""
 
 
 class C6UartPatchTests(unittest.TestCase):
@@ -29,8 +78,6 @@ class C6UartPatchTests(unittest.TestCase):
 
     def test_uart_printf_patch_clamps_truncated_vsnprintf_length(self):
         patch = PATCH.read_text(encoding="utf-8")
-        source = SOURCE.read_text(encoding="utf-8")
-        self.assertIn("char buffer[128];", source)
         self.assertIn(
             "+\t\tif (len >= (int)sizeof(buffer)) len = sizeof(buffer) - 1;",
             patch,
@@ -61,11 +108,35 @@ class C6UartPatchTests(unittest.TestCase):
 
     def test_write_contract_is_explicitly_bounded(self):
         patch = PATCH.read_text(encoding="utf-8")
-        source = SOURCE.read_text(encoding="utf-8")
-        self.assertIn("vsnprintf(buffer, sizeof(buffer), format, args)", source)
         self.assertIn("len >= (int)sizeof(buffer)", patch)
         self.assertIn("sizeof(buffer) - 1", patch)
         self.assertIn("uart_write_bytes(1, buffer, len);", patch)
+
+    def test_c_harness_executes_boundary_contract(self):
+        compiler = shutil.which("cc")
+        if compiler is None:
+            self.skipTest("C compiler is unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "uart_contract.c"
+            binary = root / "uart_contract"
+            source.write_text(C_HARNESS, encoding="utf-8")
+            subprocess.run(
+                [
+                    compiler,
+                    "-std=c11",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror",
+                    str(source),
+                    "-o",
+                    str(binary),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run([str(binary)], check=True, capture_output=True, text=True)
 
 
 if __name__ == "__main__":

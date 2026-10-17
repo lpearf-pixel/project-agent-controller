@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from wired_probe import http_sysinfo, tcp_probe
@@ -36,7 +36,7 @@ def sample(ip: str, port: int, timeout: float) -> dict:
     tcp = tcp_probe(ip, port, timeout)
     info = http_sysinfo(ip, port, timeout)
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "tcp": tcp,
         "api_status": info.get("status"),
         "api_phase": info.get("phase"),
@@ -58,8 +58,10 @@ def summarize_samples(samples: list[dict]) -> dict:
     types = sorted({str(f.get("ap_typename", f.get("ap_type"))) for f in fields
                     if f.get("ap_typename") is not None or f.get("ap_type") is not None})
     crash_flags = [_is_crash(f) for f in fields]
-    panic_transitions = sum(current and not previous for previous, current in
-                            zip([False] + crash_flags, crash_flags))
+    panic_transitions = sum(
+        current and not previous
+        for previous, current in zip([False, *crash_flags], crash_flags, strict=False)
+    )
     radio_none = sum(
         f.get("ap_version") in (None, 0, "0") and
         f.get("ap_type") in (None, 0, "0") and

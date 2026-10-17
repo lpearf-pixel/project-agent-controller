@@ -241,7 +241,8 @@ prevents a long formatted message from making the UART driver read beyond
 the stack buffer. The patch is not applied to the local OEPL checkout and
 does not flash a device.
 
-The contract tests in `tests/test_c6_uart_patch.py` cover negative, zero,
+From the PAC repository root, the contract tests in
+`tests/test_c6_uart_patch.py` cover negative, zero,
 short, exact-fit, and truncated `vsnprintf()` return values. To inspect the
 patch against the exact OEPL checkout without applying it:
 
