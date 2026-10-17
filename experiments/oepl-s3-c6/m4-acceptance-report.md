@@ -97,4 +97,4 @@ pending=0
 
 上述结论记录的是修复前状态。M4.2 已在用户单次授权范围内补齐 `/tagtypes/01.json`，并验证固定提交源文件的字节、MD5 与 SHA-256 一致。随后标签自然传输完成：`pending=0`、`updatecount=1`、`updatelast` 非零；这证明缺失类型定义已解除且协议层传输完成，但不等于屏幕视觉 PASS。
 
-屏幕未变化的首次证据是 AP 保存的 `.raw` 文件头为 `480×320`、2bpp，而 `hwType=0x01` 的定义要求 `296×128`、2bpp。OEPL `makeimage.cpp::jpg2buffer()` 直接使用上传 JPEG 的原始尺寸，首次测试图因此没有生成标签尺寸的有效 raw。随后用户明确授权一次新的单图更新，严格 `296×128` 的 fixture 已发送并使 `updatecount=1→2`；写后 raw 为旋转等价的 `128×296`、2bpp，尺寸检查通过。当前仍等待用户目视确认，保持 `DISPLAY_UPDATE=UNVERIFIED`。
+屏幕未变化的首次证据是 AP 保存的 `.raw` 文件头为 `480×320`、2bpp，而 `hwType=0x01` 的定义要求 `296×128`、2bpp。OEPL `makeimage.cpp::jpg2buffer()` 直接使用上传 JPEG 的原始尺寸，首次测试图因此没有生成标签尺寸的有效 raw。随后用户明确授权一次新的单图更新，严格 `296×128` 的 fixture 已发送并使 `updatecount=1→2`；写后 raw 为旋转等价的 `128×296`、2bpp，尺寸检查通过，用户已确认屏幕发生变化。当前显示更新为用户确认 PASS，但完整 RF 中断/重试验收仍未完成。
