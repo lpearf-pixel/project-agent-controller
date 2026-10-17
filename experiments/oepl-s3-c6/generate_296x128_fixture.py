@@ -2,15 +2,14 @@
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
-
-
 WIDTH = 296
 HEIGHT = 128
 OUTPUT = Path("/tmp/oepl-m4-296x128.jpg")
 
 
 def main() -> None:
+    from PIL import Image, ImageDraw, ImageFont
+
     image = Image.new("RGB", (WIDTH, HEIGHT), (255, 255, 255))
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, 0, WIDTH - 1, HEIGHT - 1), outline=(0, 0, 0), width=4)
