@@ -29,6 +29,7 @@
     <div class="summaryrow"><span>商品</span><strong>{{selectedProduct?.name || '尚未选定'}}</strong></div>
     <div class="summaryrow"><span>价格</span><strong>{{selectedProduct ? '¥' + (selectedProduct.price_cents / 100 | number:'1.2-2') : '—'}}</strong></div>
     <button class="primary full" type="button" [disabled]="busy || !tagInput || !selectedProduct" (click)="bind()">确认绑定（仅模拟下发）</button>
+    <div *ngIf="lastPreviewMac" class="preview"><div class="previewCaption">296×128 墨水屏预览（SVG，仅浏览器显示）</div><img [src]="previewUrl" width="296" height="128" alt="模拟的电子价签图片"/></div>
     <p class="note">修改商品价格后，系统创建新的 SIMULATED 任务。HTTP 接受和任务创建都不代表电子墨水屏已更新。</p>
   </section>
   <section class="card" *ngIf="scanning">
