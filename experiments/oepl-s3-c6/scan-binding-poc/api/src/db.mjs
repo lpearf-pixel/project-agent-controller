@@ -42,6 +42,8 @@ export function createStore(filename = ':memory:') {
       const p = validateProduct(raw);
       return tx(() => {
         const old = getProductBySku(p.sku);
+        const barcodeOwner = db.prepare('SELECT sku FROM products WHERE barcode=?').get(p.barcode);
+        if (barcodeOwner && barcodeOwner.sku !== p.sku) throw new AppError(409,'barcode_in_use','Barcode already belongs to a different SKU');
         db.prepare('INSERT INTO products(sku,barcode,name,price_cents,updated_at) VALUES(?,?,?,?,?) ' +
           'ON CONFLICT(sku) DO UPDATE SET barcode=excluded.barcode,name=excluded.name,price_cents=excluded.price_cents,updated_at=excluded.updated_at')
           .run(p.sku, p.barcode, p.name, p.price_cents, stamp());
@@ -76,7 +78,7 @@ export function createStore(filename = ':memory:') {
       const mac = normalizeMac(rawMac);
       return db.prepare('SELECT p.* FROM bindings b JOIN products p ON p.sku=b.sku WHERE b.mac=?').get(mac);
     },
-    listJobs() { return db.prepare('SELECT * FROM jobs ORDER BY created_at DESC,id DESC LIMIT 200').all(); },
+    listJobs() { return db.prepare('SELECT * FROM jobs ORDER BY rowid DESC LIMIT 200').all(); },
     close() { db.close(); }
   };
 }
