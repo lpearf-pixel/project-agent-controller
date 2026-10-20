@@ -23,6 +23,7 @@ export class ScanApp implements OnInit, OnDestroy {
   productName = '';
   priceInput = '';
   selectedProduct?: Product;
+  lastPreviewMac = '';
   bindings: Binding[] = [];
   jobs: Job[] = [];
   busy = false;
@@ -115,6 +116,7 @@ export class ScanApp implements OnInit, OnDestroy {
       const result=await this.api('/bindings',{
         method:'POST',body:JSON.stringify({mac:this.tagInput,barcode:this.selectedProduct.barcode,replace})
       });
+      this.lastPreviewMac = result.binding.mac;
       this.notify(result.idempotent ? '已经绑定，无重复下发任务。' : '绑定已保存，仅创建 SIMULATED 任务，未发送至 AP。', 'success');
       await this.refresh();
     } catch (err) {
@@ -142,6 +144,7 @@ export class ScanApp implements OnInit, OnDestroy {
         if (target==='tag') { this.tagInput=code; void this.registerTag(); }
         else { this.barcodeInput=code; void this.lookupProduct(); }
       });
+      if (!this.scanning) this.controls.stop();
     } catch(err) { this.stopScan(); this.error(err); }
   }
   stopScan(): void {
@@ -149,7 +152,7 @@ export class ScanApp implements OnInit, OnDestroy {
     this.controls=undefined;
     this.scanning=false;
   }
-  get previewUrl(): string { return '/api/preview/' + encodeURIComponent(this.tagInput.replace(/[:\s-]/g,'').replace(/^OEPL/i,'')) + '.svg'; }
+  get previewUrl(): string { return '/api/preview/' + encodeURIComponent(this.lastPreviewMac) + '.svg'; }
 }
 
 bootstrapApplication(ScanApp).catch(error => console.error(error));
