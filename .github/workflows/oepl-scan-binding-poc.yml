@@ -1,0 +1,28 @@
+name: OEPL Scan Binding PoC
+on:
+  pull_request:
+    paths:
+      - "experiments/oepl-s3-c6/scan-binding-poc/**"
+      - ".github/workflows/oepl-scan-binding-poc.yml"
+  workflow_dispatch:
+
+jobs:
+  api-and-web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: API install and tests
+        working-directory: experiments/oepl-s3-c6/scan-binding-poc/api
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+      - name: Angular install and build
+        working-directory: experiments/oepl-s3-c6/scan-binding-poc/web
+        run: |
+          npm install --no-audit --no-fund
+          npm run build

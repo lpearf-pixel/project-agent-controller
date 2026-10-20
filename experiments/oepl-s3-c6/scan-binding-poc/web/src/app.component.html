@@ -1,0 +1,54 @@
+<main class="shell">
+  <header class="topbar">
+    <div><span class="eyebrow">OpenEPaperLink · Scan & Bind</span><h1>电子价签扫码绑定</h1><p>先扫码价签，再扫码商品，确认绑定。适用于小超市 PoC。</p></div>
+    <span class="mode">SIMULATION ONLY</span>
+  </header>
+  <div class="notice" [class.error]="messageType === 'error'" [class.success]="messageType === 'success'" role="status">{{message}}</div>
+  <div class="layout">
+    <section class="card">
+      <div class="sectionhead"><span class="step">01</span><div><h2>扫码价签</h2><p>扫描 OEPL MAC 二维码或输入 16 位 MAC</p></div></div>
+      <div class="field"><label for="mac">价签编号 / OEPL MAC</label><input id="mac" [(ngModel)]="tagInput" placeholder="例如 1234567890ABCDEF" autocomplete="off" (keyup.enter)="registerTag()"/></div>
+      <div class="actions"><button type="button" (click)="startScan('tag')">使用摄像头</button><button class="primary" type="button" [disabled]="busy" (click)="registerTag()">登记价签</button></div>
+      <p class="note">登记不会验证价签当前是否在线；仅记录扫描所得的 MAC，不会修改价签固件。</p>
+    </section>
+    <section class="card">
+      <div class="sectionhead"><span class="step">02</span><div><h2>扫码商品</h2><p>扫描商品条码，并查询本地商品库</p></div></div>
+      <div class="field"><label for="barcode">商品条码</label><input id="barcode" [(ngModel)]="barcodeInput" placeholder="例如 6901234567892" autocomplete="off" (keyup.enter)="lookupProduct()"/></div>
+      <div class="actions"><button type="button" (click)="startScan('product')">使用摄像头</button><button class="primary" type="button" (click)="lookupProduct()">查询商品</button></div>
+      <div class="productform">
+        <div class="field"><label for="sku">SKU</label><input id="sku" [(ngModel)]="productSku" placeholder="例如 SKU-001"/></div>
+        <div class="field"><label for="name">商品名称</label><input id="name" [(ngModel)]="productName" placeholder="例如 矿泉水 550ml"/></div>
+        <div class="field"><label for="price">售价（元）</label><input id="price" [(ngModel)]="priceInput" inputmode="decimal" placeholder="2.00"/></div>
+        <button type="button" (click)="saveProduct()">保存 / 更新商品信息</button>
+      </div>
+    </section>
+  </div>
+  <section class="card summary">
+    <div class="sectionhead"><span class="step">03</span><div><h2>绑定并生成模拟价签画面</h2><p>不会调用真实 AP 的图片上传或无线控制接口</p></div></div>
+    <div class="summaryrow"><span>价签</span><strong>{{tagInput || '尚未录入'}}</strong></div>
+    <div class="summaryrow"><span>商品</span><strong>{{selectedProduct?.name || '尚未选定'}}</strong></div>
+    <div class="summaryrow"><span>价格</span><strong>{{selectedProduct ? '¥' + (selectedProduct.price_cents / 100 | number:'1.2-2') : '—'}}</strong></div>
+    <button class="primary full" type="button" [disabled]="busy || !tagInput || !selectedProduct" (click)="bind()">确认绑定（仅模拟下发）</button>
+    <div *ngIf="lastPreviewMac" class="preview"><div class="previewCaption">296×128 墨水屏预览（SVG，仅浏览器显示）</div><img [src]="previewUrl" width="296" height="128" alt="模拟的电子价签图片"/></div>
+    <p class="note">修改商品价格后，系统创建新的 SIMULATED 任务。HTTP 接受和任务创建都不代表电子墨水屏已更新。</p>
+  </section>
+  <section class="card" *ngIf="scanning">
+    <div class="sectionhead"><span class="step camera">◎</span><div><h2>扫描{{scanTarget==='tag'?'价签二维码':'商品条形码'}}</h2><p>请将码置于取景框中</p></div></div>
+    <video #video autoplay muted playsinline class="cameraView"></video>
+    <button type="button" (click)="stopScan()">关闭摄像头</button>
+  </section>
+  <div class="layout lower">
+    <section class="card">
+      <div class="sectionhead"><div><h2>当前绑定</h2><p>保存在本机 SQLite 中</p></div><button type="button" (click)="refresh()">刷新</button></div>
+      <div *ngIf="!bindings.length" class="empty">暂无绑定记录</div>
+      <article *ngFor="let b of bindings" class="record"><div><strong>{{b.name}}</strong><small>{{b.mac}} · {{b.sku}}</small><small>价签在线状态：未验证</small></div><strong>¥{{b.price_cents / 100 | number:'1.2-2'}}</strong></article>
+    </section>
+    <section class="card">
+      <div class="sectionhead"><div><h2>模拟下发队列</h2><p>仅为业务任务记录，不代表 RF 传输</p></div></div>
+      <div *ngIf="!jobs.length" class="empty">暂无模拟下发任务</div>
+      <article *ngFor="let job of jobs.slice(0,10)" class="record"><div><strong>{{job.reason === 'BIND' ? '绑定价签' : '商品内容变更'}}</strong><small>{{job.mac}} · {{job.created_at | date:'short'}}</small></div><span class="pill">{{job.status}}</span></article>
+      <div *ngIf="bindings.length" class="note">预览：绑定成功后访问对应的 <code>/api/preview/&lt;MAC&gt;.svg</code>，输出 296×128 SVG，不发送至价签。</div>
+    </section>
+  </div>
+  <footer>PoC · API localhost only · 数据本地保存 · 不连接 AP 写入接口</footer>
+</main>
