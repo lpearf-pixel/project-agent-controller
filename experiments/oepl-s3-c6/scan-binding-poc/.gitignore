@@ -1,0 +1,8 @@
+api/data/
+api/node_modules/
+web/node_modules/
+web/dist/
+web/.angular/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
